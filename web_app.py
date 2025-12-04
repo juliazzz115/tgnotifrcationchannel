@@ -167,6 +167,123 @@ def status():
     }
 
 
+@app.route('/status')
+def status_page():
+    """Страница проверки статуса"""
+    is_connected = telegram_client is not None and telegram_client.is_connected()
+
+    status_html = f"""
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Статус подключения</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                margin: 0;
+                padding: 20px;
+            }}
+            .container {{
+                background: white;
+                padding: 40px;
+                border-radius: 20px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                max-width: 600px;
+                width: 100%;
+            }}
+            h1 {{
+                color: #333;
+                margin-bottom: 20px;
+            }}
+            .status {{
+                padding: 20px;
+                border-radius: 10px;
+                margin: 20px 0;
+                font-size: 18px;
+                font-weight: bold;
+            }}
+            .connected {{
+                background: #d1fae5;
+                color: #065f46;
+            }}
+            .disconnected {{
+                background: #fee2e2;
+                color: #991b1b;
+            }}
+            .info {{
+                background: #f3f4f6;
+                padding: 15px;
+                border-radius: 8px;
+                margin: 15px 0;
+                line-height: 1.6;
+            }}
+            .warning {{
+                background: #fef3c7;
+                padding: 15px;
+                border-radius: 8px;
+                margin: 15px 0;
+                color: #92400e;
+            }}
+            a {{
+                color: #667eea;
+                text-decoration: none;
+                font-weight: bold;
+            }}
+            .button {{
+                display: inline-block;
+                padding: 12px 24px;
+                background: #667eea;
+                color: white;
+                text-decoration: none;
+                border-radius: 8px;
+                margin: 10px 5px;
+            }}
+        </style>
+        <script>
+            // Автообновление каждые 5 секунд
+            setTimeout(() => location.reload(), 5000);
+        </script>
+    </head>
+    <body>
+        <div class="container">
+            <h1>📊 Статус подключения</h1>
+
+            <div class="status {'connected' if is_connected else 'disconnected'}">
+                {'✅ Telegram подключен' if is_connected else '❌ Telegram НЕ подключен'}
+            </div>
+
+            <div class="info">
+                <strong>Канал для мониторинга:</strong><br>
+                {os.getenv('CHANNEL_ID', 'не указан')}
+            </div>
+
+            <div class="info">
+                <strong>Задержка уведомлений:</strong><br>
+                {os.getenv('ALERT_DELAY', '60')} секунд
+            </div>
+
+            {'<div class="info"><strong>✅ Всё работает!</strong><br>Сервер мониторит канал. Когда придет сообщение - появится уведомление.</div>' if is_connected else '<div class="warning"><strong>⚠️ Telegram не подключен!</strong><br><br>Возможные причины:<br>• Не указаны API_ID и API_HASH<br>• Неправильный CHANNEL_ID<br>• Требуется авторизация (номер телефона и код)<br>• Проверьте логи сервера</div>'}
+
+            <div style="margin-top: 30px; text-align: center;">
+                <a href="/" class="button">Главная</a>
+                <a href="/test" class="button">Тест уведомления</a>
+            </div>
+
+            <div class="info" style="margin-top: 20px; font-size: 14px; color: #666;">
+                Страница обновляется каждые 5 секунд
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return status_html
+
+
 @app.route('/test')
 def send_test_alert():
     """Отправить тестовое уведомление - просто откройте этот URL!"""
