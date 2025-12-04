@@ -167,6 +167,89 @@ def status():
     }
 
 
+@app.route('/test')
+def send_test_alert():
+    """Отправить тестовое уведомление - просто откройте этот URL!"""
+    test_message = """📋 *Чаты без ответа MCG1 (сегодня):*
+
+– KIRYL ILYENKOU (15:32)
+  💬 понял, спасибо
+
+– Yelyzaveta Bachiieva (15:02)
+  💬 Будут скорее эти и еще какие-то ,я отпишу сегодня - завтра
+
+– Volodymyr SMIRNOV JDG L (13:29)
+  💬 Да, буду пробовать на следующей неделе!
+
+– Polina VITARO SPÓŁKA (13:18)
+  💬 Здравствуйте
+К сожалению нет
+В понедельник займусь и этим и договором
+
+– Павел (13:09)
+  💬 Уточните и я им отпишу 🙏"""
+
+    from datetime import datetime
+
+    # Отправляем тестовое уведомление всем подключенным клиентам
+    socketio.emit('new_alert', {
+        'message_id': 99999,
+        'message_text': test_message,
+        'channel_name': '🧪 ТЕСТОВЫЙ КАНАЛ',
+        'timestamp': datetime.now().strftime('%H:%M:%S'),
+        'date': datetime.now().strftime('%d.%m.%Y')
+    }, namespace='/')
+
+    logger.info("Отправлено тестовое уведомление")
+
+    return """
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Тест отправлен!</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                margin: 0;
+            }
+            .container {
+                background: white;
+                padding: 40px;
+                border-radius: 20px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                text-align: center;
+                max-width: 500px;
+            }
+            h1 { color: #10b981; }
+            p { color: #666; line-height: 1.6; }
+            a {
+                display: inline-block;
+                margin-top: 20px;
+                padding: 12px 24px;
+                background: #667eea;
+                color: white;
+                text-decoration: none;
+                border-radius: 8px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>✅ Тестовое уведомление отправлено!</h1>
+            <p>Посмотрите на вкладку с главной страницей - должно появиться большое красное окно!</p>
+            <p>Если вкладка не открыта, <a href="/">откройте её сначала</a></p>
+            <a href="/test">Отправить ещё раз</a>
+        </div>
+    </body>
+    </html>
+    """
+
+
 @socketio.on('connect')
 def handle_connect():
     """Подключение клиента"""
