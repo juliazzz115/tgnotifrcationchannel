@@ -122,12 +122,22 @@ class TelegramMonitor:
 
     async def _on_new_message(self, event: events.NewMessage.Event):
         """Обработчик новых сообщений"""
-        message = event.message
-        chat = await event.get_chat()
-        channel_name = getattr(chat, 'title', str(self.channel_entity))
+        try:
+            message = event.message
+            chat = await event.get_chat()
+            channel_name = getattr(chat, 'title', str(self.channel_entity))
 
-        logger.info(f"Новое сообщение в '{channel_name}' (ID: {message.id})")
-        self._schedule_alert(message, channel_name)
+            logger.info("=" * 80)
+            logger.info(f"🔔 НОВОЕ СООБЩЕНИЕ ОБНАРУЖЕНО!")
+            logger.info(f"📢 Канал: '{channel_name}'")
+            logger.info(f"🆔 ID сообщения: {message.id}")
+            logger.info(f"💬 Текст: {message.text[:100] if message.text else '[Без текста]'}...")
+            logger.info(f"⏰ Время получения: {datetime.now().strftime('%H:%M:%S')}")
+            logger.info("=" * 80)
+
+            self._schedule_alert(message, channel_name)
+        except Exception as e:
+            logger.error(f"❌ Ошибка обработки сообщения: {e}", exc_info=True)
 
     async def start(self):
         """Запуск мониторинга"""
@@ -149,20 +159,18 @@ class TelegramMonitor:
             except Exception as e:
                 logger.info(f"Подписка на канал (возможно уже подписан): {e}")
 
-            # Регистрируем обработчик ДО запуска мониторинга
-            # Telegram использует разные форматы ID: 2887469926 и -1002887469926
-            channel_id_variants = [
-                channel.id,
-                -1000000000000 - channel.id,  # Формат supergroup: -100 + ID
-                self.channel_entity
-            ]
-            logger.info(f"Регистрация обработчика для канала: {self.channel_entity} (ID варианты: {channel_id_variants})")
+            # Регистрируем обработчик используя add_event_handler (более надежный метод)
+            # Используем объект канала напрямую вместо попыток угадать ID форматы
+            logger.info(f"Регистрация обработчика для канала: {channel.title} (ID: {channel.id})")
 
-            @self.client.on(events.NewMessage(chats=channel_id_variants))
-            async def handler(event):
-                await self._on_new_message(event)
+            # Используем add_event_handler для надежной регистрации
+            self.client.add_event_handler(
+                self._on_new_message,
+                events.NewMessage(chats=[channel])
+            )
 
-            logger.info("✅ Мониторинг запущен!")
+            logger.info("✅ Мониторинг запущен! Обработчик зарегистрирован для всех новых сообщений в канале.")
+            logger.info(f"🔔 Жду новые сообщения в канале '{channel.title}'...")
             await self.client.run_until_disconnected()
 
         except Exception as e:
