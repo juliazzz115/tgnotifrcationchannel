@@ -150,9 +150,15 @@ class TelegramMonitor:
                 logger.info(f"Подписка на канал (возможно уже подписан): {e}")
 
             # Регистрируем обработчик ДО запуска мониторинга
-            logger.info(f"Регистрация обработчика для канала: {self.channel_entity} (ID: {channel.id})")
+            # Telegram использует разные форматы ID: 2887469926 и -1002887469926
+            channel_id_variants = [
+                channel.id,
+                -1000000000000 - channel.id,  # Формат supergroup: -100 + ID
+                self.channel_entity
+            ]
+            logger.info(f"Регистрация обработчика для канала: {self.channel_entity} (ID варианты: {channel_id_variants})")
 
-            @self.client.on(events.NewMessage(chats=[channel.id, self.channel_entity]))
+            @self.client.on(events.NewMessage(chats=channel_id_variants))
             async def handler(event):
                 await self._on_new_message(event)
 
