@@ -344,7 +344,12 @@
 
     <script>
         // Подключение к WebSocket
-        const socket = io();
+        const socket = io({
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionAttempts: 10
+        });
         const statusEl = document.getElementById('status');
         const modalOverlay = document.getElementById('modalOverlay');
         const modalMessage = document.getElementById('modalMessage');
