@@ -47,6 +47,7 @@ socketio = SocketIO(
 # Глобальные переменные
 telegram_client = None
 pending_alerts = {}
+unread_alerts = []  # Очередь непрочитанных уведомлений
 
 
 class TelegramMonitor:
@@ -77,6 +78,7 @@ class TelegramMonitor:
 
     def _send_alert(self, message_text: str, channel_name: str, message_id: int):
         """Отправить уведомление в браузер"""
+        global unread_alerts
         try:
             logger.info(f"Отправка уведомления в браузер (ID: {message_id})")
 
@@ -88,8 +90,13 @@ class TelegramMonitor:
                 'date': datetime.now().strftime('%d.%m.%Y')
             }
 
+            # Добавляем в очередь непрочитанных
+            unread_alerts.append(alert_data)
+            logger.info(f"Добавлено в очередь. Всего непрочитанных: {len(unread_alerts)}")
+
+            # Отправляем всем подключенным клиентам
             self.socketio.emit('new_alert', alert_data, namespace='/')
-            logger.info("Уведомление отправлено")
+            logger.info("Уведомление отправлено всем клиентам")
 
         except Exception as e:
             logger.error(f"Ошибка отправки: {e}", exc_info=True)
@@ -147,15 +154,7 @@ class TelegramMonitor:
 
             @self.client.on(events.NewMessage(chats=[channel.id, self.channel_entity]))
             async def handler(event):
-                logger.info(f"🔔 Событие NewMessage получено! Chat ID: {event.chat_id}")
                 await self._on_new_message(event)
-
-            # Также подписываемся на ВСЕ сообщения для отладки
-            @self.client.on(events.NewMessage())
-            async def debug_handler(event):
-                chat = await event.get_chat()
-                chat_name = getattr(chat, 'title', getattr(chat, 'username', 'Unknown'))
-                logger.info(f"🔍 DEBUG: Сообщение от {chat_name} (ID: {event.chat_id}), нужен ID: {channel.id}")
 
             logger.info("✅ Мониторинг запущен!")
             await self.client.run_until_disconnected()
@@ -192,7 +191,8 @@ def status():
     return {
         'status': 'running',
         'telegram_connected': telegram_client is not None and telegram_client.is_connected(),
-        'pending_alerts': len(pending_alerts)
+        'pending_alerts': len(pending_alerts),
+        'unread_alerts': len(unread_alerts)
     }
 
 
@@ -399,8 +399,16 @@ def send_test_alert():
 @socketio.on('connect')
 def handle_connect():
     """Подключение клиента"""
+    global unread_alerts
     logger.info(f"Клиент подключен: {request.sid}")
     emit('connected', {'status': 'ok'})
+
+    # Отправляем все непрочитанные уведомления новому клиенту
+    if unread_alerts:
+        logger.info(f"Отправка {len(unread_alerts)} непрочитанных уведомлений клиенту {request.sid}")
+        for alert in unread_alerts:
+            emit('new_alert', alert)
+            logger.info(f"Отправлено уведомление ID {alert['message_id']} клиенту {request.sid}")
 
 
 @socketio.on('disconnect')
@@ -412,9 +420,15 @@ def handle_disconnect():
 @socketio.on('alert_confirmed')
 def handle_confirmed(data):
     """Подтверждение уведомления"""
+    global unread_alerts
     message_id = data.get('message_id')
     user_name = data.get('user_name')
-    logger.info(f"Уведомление {message_id} подтверждено: {user_name}")
+    logger.info(f"Уведомление {message_id} подтверждено пользователем: {user_name}")
+
+    # Удаляем из очереди непрочитанных
+    unread_alerts = [alert for alert in unread_alerts if alert['message_id'] != message_id]
+    logger.info(f"Уведомление {message_id} удалено из очереди. Осталось непрочитанных: {len(unread_alerts)}")
+
     emit('confirmation_received', {'message_id': message_id})
 
 
