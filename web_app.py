@@ -142,9 +142,20 @@ class TelegramMonitor:
             except Exception as e:
                 logger.info(f"Подписка на канал (возможно уже подписан): {e}")
 
-            @self.client.on(events.NewMessage(chats=self.channel_entity))
+            # Регистрируем обработчик ДО запуска мониторинга
+            logger.info(f"Регистрация обработчика для канала: {self.channel_entity} (ID: {channel.id})")
+
+            @self.client.on(events.NewMessage(chats=[channel.id, self.channel_entity]))
             async def handler(event):
+                logger.info(f"🔔 Событие NewMessage получено! Chat ID: {event.chat_id}")
                 await self._on_new_message(event)
+
+            # Также подписываемся на ВСЕ сообщения для отладки
+            @self.client.on(events.NewMessage())
+            async def debug_handler(event):
+                chat = await event.get_chat()
+                chat_name = getattr(chat, 'title', getattr(chat, 'username', 'Unknown'))
+                logger.info(f"🔍 DEBUG: Сообщение от {chat_name} (ID: {event.chat_id}), нужен ID: {channel.id}")
 
             logger.info("✅ Мониторинг запущен!")
             await self.client.run_until_disconnected()
