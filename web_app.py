@@ -49,7 +49,7 @@ class TelegramMonitor:
         self.api_id = os.getenv('API_ID')
         self.api_hash = os.getenv('API_HASH')
         self.channel_id = os.getenv('CHANNEL_ID')
-        self.alert_delay = int(os.getenv('ALERT_DELAY', '60'))
+        self.alert_delay = int(os.getenv('ALERT_DELAY', '5'))  # Временно 5 секунд для отладки
 
         if not self.api_id or not self.api_hash or not self.channel_id:
             raise ValueError("Необходимо заполнить API_ID, API_HASH и CHANNEL_ID в файле .env")
