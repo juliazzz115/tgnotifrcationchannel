@@ -415,24 +415,58 @@
             }
         }
 
-        // Воспроизведение звука
+        // Воспроизведение ГРОМКОГО и ДЛИННОГО звука
+        let soundInterval = null;
+
         function playAlertSound() {
             if (!alertSound) return;
 
-            const oscillator = alertSound.createOscillator();
-            const gainNode = alertSound.createGain();
+            // Останавливаем предыдущий звук если есть
+            if (soundInterval) {
+                clearInterval(soundInterval);
+            }
 
-            oscillator.connect(gainNode);
-            gainNode.connect(alertSound.destination);
+            // Функция для одного звукового сигнала
+            function beep(frequency, duration, volume) {
+                const oscillator = alertSound.createOscillator();
+                const gainNode = alertSound.createGain();
 
-            oscillator.frequency.value = 800;
-            oscillator.type = 'sine';
+                oscillator.connect(gainNode);
+                gainNode.connect(alertSound.destination);
 
-            gainNode.gain.setValueAtTime(0.3, alertSound.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, alertSound.currentTime + 0.5);
+                oscillator.frequency.value = frequency;
+                oscillator.type = 'sine';
 
-            oscillator.start(alertSound.currentTime);
-            oscillator.stop(alertSound.currentTime + 0.5);
+                gainNode.gain.setValueAtTime(volume, alertSound.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, alertSound.currentTime + duration);
+
+                oscillator.start(alertSound.currentTime);
+                oscillator.stop(alertSound.currentTime + duration);
+            }
+
+            // Играем серию звуков: высокий-низкий-высокий
+            let count = 0;
+            soundInterval = setInterval(() => {
+                if (count % 2 === 0) {
+                    beep(1200, 0.3, 0.7); // Высокий тон, ГРОМКИЙ
+                } else {
+                    beep(800, 0.3, 0.7);  // Низкий тон, ГРОМКИЙ
+                }
+                count++;
+
+                // Повторяем 20 раз (примерно 6 секунд)
+                if (count >= 20) {
+                    clearInterval(soundInterval);
+                }
+            }, 300);
+        }
+
+        // Остановка звука
+        function stopAlertSound() {
+            if (soundInterval) {
+                clearInterval(soundInterval);
+                soundInterval = null;
+            }
         }
 
         // Системные уведомления браузера
@@ -556,6 +590,9 @@
 
             // Закрываем окно
             modalOverlay.classList.remove('active');
+
+            // Останавливаем звук
+            stopAlertSound();
 
             // Выходим из полноэкранного режима
             exitFullscreen();
