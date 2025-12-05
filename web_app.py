@@ -126,6 +126,14 @@ class TelegramMonitor:
             channel = await self.client.get_entity(self.channel_entity)
             logger.info(f"Канал: {channel.title} (ID: {channel.id})")
 
+            # ВАЖНО: Подписываемся на канал если ещё не подписаны
+            try:
+                from telethon.tl.functions.channels import JoinChannelRequest
+                await self.client(JoinChannelRequest(channel))
+                logger.info("✅ Подписан на канал")
+            except Exception as e:
+                logger.info(f"Подписка на канал (возможно уже подписан): {e}")
+
             @self.client.on(events.NewMessage(chats=self.channel_entity))
             async def handler(event):
                 await self._on_new_message(event)
@@ -142,10 +150,12 @@ def run_telegram_monitor():
     """Запуск монитора в отдельном потоке"""
     global telegram_client
     try:
-        monitor = TelegramMonitor(socketio)
-        telegram_client = monitor.client
+        # Создаем event loop ПЕРЕД созданием TelegramMonitor
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+
+        monitor = TelegramMonitor(socketio)
+        telegram_client = monitor.client
         loop.run_until_complete(monitor.start())
     except Exception as e:
         logger.error(f"Ошибка: {e}", exc_info=True)
