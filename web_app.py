@@ -142,10 +142,12 @@ def run_telegram_monitor():
     """Запуск монитора в отдельном потоке"""
     global telegram_client
     try:
-        monitor = TelegramMonitor(socketio)
-        telegram_client = monitor.client
+        # Создаем event loop ПЕРЕД созданием TelegramMonitor
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+
+        monitor = TelegramMonitor(socketio)
+        telegram_client = monitor.client
         loop.run_until_complete(monitor.start())
     except Exception as e:
         logger.error(f"Ошибка: {e}", exc_info=True)
