@@ -415,7 +415,7 @@
             }
         }
 
-        // Воспроизведение ГРОМКОГО и ДЛИННОГО звука
+        // Воспроизведение ГРОМКОГО БЕСКОНЕЧНОГО звука
         let soundInterval = null;
 
         function playAlertSound() {
@@ -444,27 +444,49 @@
                 oscillator.stop(alertSound.currentTime + duration);
             }
 
-            // Играем серию звуков: высокий-низкий-высокий
+            // Играем серию звуков БЕСКОНЕЧНО пока не подтвердят
             let count = 0;
             soundInterval = setInterval(() => {
                 if (count % 2 === 0) {
-                    beep(1200, 0.3, 0.7); // Высокий тон, ГРОМКИЙ
+                    beep(1200, 0.3, 1.0); // Высокий тон, МАКСИМАЛЬНАЯ ГРОМКОСТЬ
                 } else {
-                    beep(800, 0.3, 0.7);  // Низкий тон, ГРОМКИЙ
+                    beep(800, 0.3, 1.0);  // Низкий тон, МАКСИМАЛЬНАЯ ГРОМКОСТЬ
                 }
                 count++;
-
-                // Повторяем 20 раз (примерно 6 секунд)
-                if (count >= 20) {
-                    clearInterval(soundInterval);
-                }
+                // БЕСКОНЕЧНЫЙ ЦИКЛ - убрали ограничение
             }, 300);
+
+            // Вибрация на телефоне (если поддерживается)
+            if ('vibrate' in navigator) {
+                // Вибрируем постоянно: 500мс вибрация, 500мс пауза
+                const vibratePattern = [500, 500];
+                navigator.vibrate(vibratePattern);
+
+                // Повторяем вибрацию каждую секунду
+                const vibrateInterval = setInterval(() => {
+                    navigator.vibrate(vibratePattern);
+                }, 1000);
+
+                // Сохраняем ID для остановки
+                soundInterval.vibrateInterval = vibrateInterval;
+            }
         }
 
-        // Остановка звука
+        // Остановка звука и вибрации
         function stopAlertSound() {
             if (soundInterval) {
                 clearInterval(soundInterval);
+
+                // Останавливаем вибрацию если была
+                if (soundInterval.vibrateInterval) {
+                    clearInterval(soundInterval.vibrateInterval);
+                }
+
+                // Останавливаем текущую вибрацию
+                if ('vibrate' in navigator) {
+                    navigator.vibrate(0);
+                }
+
                 soundInterval = null;
             }
         }
