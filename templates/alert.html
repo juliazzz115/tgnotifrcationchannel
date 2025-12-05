@@ -1,207 +1,552 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
-  <title>Telegram Alerts</title>
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" crossorigin="anonymous"></script>
-  <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0f172a;
-      color: #f9fafb;
-      margin: 0;
-      padding: 0;
-    }
-    .status {
-      background: #020617;
-      padding: 8px 16px;
-      font-size: 14px;
-      border-bottom: 1px solid #1e293b;
-    }
-    .overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.85);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-    }
-    .hidden {
-      display: none;
-    }
-    .alert-box {
-      background: #1e293b;
-      padding: 24px;
-      border-radius: 16px;
-      width: min(90vw, 600px);
-      box-shadow: 0 0 30px rgba(0, 0, 0, 0.4);
-    }
-    .title {
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 12px;
-      color: #fbbf24;
-    }
-    .message {
-      background: #0f172a;
-      padding: 12px;
-      border-radius: 8px;
-      margin-bottom: 16px;
-      white-space: pre-wrap;
-      max-height: 300px;
-      overflow-y: auto;
-    }
-    .queue {
-      font-size: 13px;
-      color: #9ca3af;
-      margin-bottom: 12px;
-    }
-    input[type="text"] {
-      width: 100%;
-      padding: 8px;
-      border-radius: 6px;
-      border: 1px solid #475569;
-      background: #0f172a;
-      color: #fff;
-      margin-bottom: 8px;
-    }
-    label {
-      font-size: 13px;
-    }
-    .row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-    button {
-      background: linear-gradient(to right, #facc15, #f97316);
-      color: #111;
-      border: none;
-      border-radius: 8px;
-      padding: 10px 16px;
-      font-weight: 600;
-      cursor: pointer;
-      font-size: 14px;
-    }
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Alerts - Мониторинг</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 32px;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: 600;
+            margin: 20px 0;
+            font-size: 16px;
+        }
+
+        .status.connected {
+            background: #10b981;
+            color: white;
+        }
+
+        .status.disconnected {
+            background: #ef4444;
+            color: white;
+        }
+
+        .info {
+            color: #666;
+            line-height: 1.8;
+            margin: 20px 0;
+        }
+
+        /* ПОЛНОЭКРАННОЕ МОДАЛЬНОЕ ОКНО */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 99999;
+            animation: fadeIn 0.3s;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-10px); }
+            20%, 40%, 60%, 80% { transform: translateX(10px); }
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+            width: 90vw;
+            height: 90vh;
+            border-radius: 20px;
+            padding: 40px;
+            color: white;
+            overflow-y: auto;
+            box-shadow: 0 0 100px rgba(255, 68, 68, 0.8);
+            animation: slideIn 0.5s;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: scale(0.8) translateY(-100px);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1) translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-header {
+            text-align: center;
+            margin-bottom: 30px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .modal-header h2 {
+            font-size: 48px;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .modal-header .time {
+            font-size: 24px;
+            opacity: 0.9;
+        }
+
+        .modal-header .channel {
+            font-size: 20px;
+            opacity: 0.8;
+            margin-top: 10px;
+        }
+
+        .message-box {
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+            font-size: 18px;
+            line-height: 1.6;
+            max-height: 40vh;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            text-align: left;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+        }
+
+        .message-label {
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .confirmation-box {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 30px;
+        }
+
+        .confirmation-box h3 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            margin: 20px 0;
+            text-align: left;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 18px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .input-group input[type="text"] {
+            width: 100%;
+            padding: 15px;
+            font-size: 18px;
+            border: none;
+            border-radius: 10px;
+            background: white;
+            color: #333;
+        }
+
+        .checkbox-group {
+            margin: 25px 0;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 25px;
+            height: 25px;
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            font-size: 18px;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .confirm-button {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 20px 40px;
+            font-size: 22px;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+            transition: all 0.3s;
+        }
+
+        .confirm-button:hover {
+            background: #059669;
+            transform: scale(1.05);
+        }
+
+        .error-message {
+            color: #fef3c7;
+            background: rgba(245, 158, 11, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            font-size: 16px;
+            font-weight: bold;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+            animation: shake 0.5s;
+        }
+
+        /* Scroll bar styling */
+        .message-box::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .message-box::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .message-box::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+
+        .notification-permission {
+            background: #f59e0b;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .notification-permission:hover {
+            background: #d97706;
+        }
+    </style>
 </head>
 <body>
+    <div class="container">
+        <h1>📱 Telegram Alerts</h1>
+        <div class="status disconnected" id="status">Подключение...</div>
+        <div class="info">
+            <p><strong>Статус:</strong> Ожидание сообщений</p>
+            <p><strong>Инструкция:</strong></p>
+            <p>Оставьте эту страницу открытой.<br>
+            Когда придет сообщение - появится большое окно.</p>
+            <p style="margin-top: 15px; color: #999; font-size: 14px;">
+                Не закрывайте эту вкладку!
+            </p>
+        </div>
 
-  <div class="status">
-    🔔 Подключено к серверу уведомлений
-  </div>
-
-  <div id="overlay" class="overlay hidden">
-    <div class="alert-box">
-      <div class="title">Новое сообщение Telegram</div>
-      <div class="queue">В очереди ещё: <span id="queue-count">0</span></div>
-      <div class="message" id="message-text">Текст сообщения...</div>
-
-      <label>Ваше имя:</label>
-      <input id="user-name" type="text" placeholder="Введите имя" />
-      <div class="row">
-        <input id="confirm-checkbox" type="checkbox" />
-        <label for="confirm-checkbox">Я прочитал(а) сообщение и беру в работу</label>
-      </div>
-      <button id="confirm-btn" disabled>✅ Подтвердить</button>
+        <div id="notificationBtn" class="notification-permission" style="display: none;">
+            Разрешить уведомления
+        </div>
     </div>
-  </div>
 
-  <script>
-    const socket = io();
+    <!-- МОДАЛЬНОЕ ОКНО -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚠️ НОВОЕ СООБЩЕНИЕ ⚠️</h2>
+                <div class="time" id="modalTime">--:--:--</div>
+                <div class="channel" id="modalChannel">Канал: ...</div>
+            </div>
 
-    // Элементы
-    const overlay = document.getElementById("overlay");
-    const messageText = document.getElementById("message-text");
-    const queueCountEl = document.getElementById("queue-count");
-    const userNameInput = document.getElementById("user-name");
-    const confirmCheckbox = document.getElementById("confirm-checkbox");
-    const confirmBtn = document.getElementById("confirm-btn");
+            <div class="message-label">Содержимое сообщения:</div>
+            <div class="message-box" id="modalMessage">
+                Загрузка...
+            </div>
 
-    // Очередь сообщений
-    const alertQueue = [];
-    let currentAlert = null;
-    let isShowing = false;
+            <div class="confirmation-box">
+                <h3>Для закрытия окна необходимо:</h3>
 
-    function updateQueueCount() {
-      queueCountEl.textContent = alertQueue.length;
-    }
+                <div class="input-group">
+                    <label>1. Введите ваше имя:</label>
+                    <input type="text" id="userName" placeholder="Ваше имя">
+                </div>
 
-    function showOverlay(alert) {
-      currentAlert = alert;
-      messageText.textContent = alert.message_text || "[Без текста]";
-      overlay.classList.remove("hidden");
-      userNameInput.value = "";
-      confirmCheckbox.checked = false;
-      confirmBtn.disabled = true;
-      isShowing = true;
-      updateQueueCount();
-    }
+                <div class="checkbox-group">
+                    <input type="checkbox" id="confirmCheck">
+                    <label for="confirmCheck">
+                        2. Я проверил(а) все сообщения и принял(а) меры
+                    </label>
+                </div>
 
-    function hideOverlay() {
-      overlay.classList.add("hidden");
-      currentAlert = null;
-      isShowing = false;
-      updateQueueCount();
-    }
+                <button class="confirm-button" id="confirmBtn">
+                    ✓ ПОДТВЕРДИТЬ И ЗАКРЫТЬ
+                </button>
 
-    function showNextAlertIfAny() {
-      if (alertQueue.length > 0) {
-        const next = alertQueue.shift();
-        showOverlay(next);
-      } else {
-        hideOverlay();
-      }
-      updateQueueCount();
-    }
+                <div class="error-message" id="errorMessage"></div>
+            </div>
+        </div>
+    </div>
 
-    function canConfirm() {
-      return (
-        currentAlert &&
-        userNameInput.value.trim().length > 0 &&
-        confirmCheckbox.checked
-      );
-    }
+    <script>
+        // Подключение к WebSocket
+        const socket = io({
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionAttempts: 10
+        });
+        const statusEl = document.getElementById('status');
+        const modalOverlay = document.getElementById('modalOverlay');
+        const modalMessage = document.getElementById('modalMessage');
+        const modalTime = document.getElementById('modalTime');
+        const modalChannel = document.getElementById('modalChannel');
+        const userName = document.getElementById('userName');
+        const confirmCheck = document.getElementById('confirmCheck');
+        const confirmBtn = document.getElementById('confirmBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        const notificationBtn = document.getElementById('notificationBtn');
 
-    userNameInput.addEventListener("input", () => {
-      confirmBtn.disabled = !canConfirm();
-    });
+        let currentMessageId = null;
+        let alertSound = null;
 
-    confirmCheckbox.addEventListener("change", () => {
-      confirmBtn.disabled = !canConfirm();
-    });
+        // Создаем звук для привлечения внимания
+        function initSound() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                const audioCtx = new AudioContext();
+                alertSound = audioCtx;
+            } catch (e) {
+                console.log('Audio not supported');
+            }
+        }
 
-    confirmBtn.addEventListener("click", () => {
-      if (!currentAlert) return;
-      const name = userNameInput.value.trim();
-      socket.emit("alert_confirmed", {
-        message_id: currentAlert.message_id,
-        user_name: name,
-      });
-      showNextAlertIfAny();
-    });
+        // Воспроизведение звука
+        function playAlertSound() {
+            if (!alertSound) return;
 
-    // Новый алерт от сервера
-    socket.on("new_alert", (data) => {
-      console.log("NEW ALERT:", data);
-      alertQueue.push(data);
-      updateQueueCount();
-      if (!isShowing) {
-        showNextAlertIfAny();
-      }
-    });
+            const oscillator = alertSound.createOscillator();
+            const gainNode = alertSound.createGain();
 
-    socket.on("connect", () => {
-      console.log("Socket connected");
-    });
-  </script>
+            oscillator.connect(gainNode);
+            gainNode.connect(alertSound.destination);
 
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+
+            gainNode.gain.setValueAtTime(0.3, alertSound.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, alertSound.currentTime + 0.5);
+
+            oscillator.start(alertSound.currentTime);
+            oscillator.stop(alertSound.currentTime + 0.5);
+        }
+
+        // Системные уведомления браузера
+        function requestNotificationPermission() {
+            if ('Notification' in window && Notification.permission === 'default') {
+                notificationBtn.style.display = 'block';
+                notificationBtn.onclick = () => {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === 'granted') {
+                            notificationBtn.style.display = 'none';
+                            new Notification('Уведомления включены!', {
+                                body: 'Теперь вы будете получать уведомления о новых сообщениях',
+                                icon: '📱'
+                            });
+                        }
+                    });
+                };
+            }
+        }
+
+        function showBrowserNotification(title, body) {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const notification = new Notification(title, {
+                    body: body,
+                    icon: '⚠️',
+                    requireInteraction: true,
+                    tag: 'telegram-alert'
+                });
+
+                notification.onclick = () => {
+                    window.focus();
+                    notification.close();
+                };
+            }
+        }
+
+        // Подключение установлено
+        socket.on('connected', () => {
+            statusEl.textContent = 'Подключено ✓';
+            statusEl.className = 'status connected';
+        });
+
+        // Отключение
+        socket.on('disconnect', () => {
+            statusEl.textContent = 'Отключено ✗';
+            statusEl.className = 'status disconnected';
+        });
+
+        // Новое уведомление
+        socket.on('new_alert', (data) => {
+            console.log('Получено уведомление:', data);
+
+            currentMessageId = data.message_id;
+            modalMessage.textContent = data.message_text;
+            modalTime.textContent = `Получено: ${data.timestamp}`;
+            modalChannel.textContent = `Канал: ${data.channel_name}`;
+
+            // Очищаем форму
+            userName.value = '';
+            confirmCheck.checked = false;
+            errorMessage.classList.remove('show');
+
+            // Показываем модальное окно
+            modalOverlay.classList.add('active');
+
+            // Фокус на поле ввода
+            setTimeout(() => userName.focus(), 500);
+
+            // Воспроизводим звук
+            initSound();
+            playAlertSound();
+
+            // Показываем браузерное уведомление
+            showBrowserNotification(
+                '⚠️ НОВОЕ СООБЩЕНИЕ',
+                `Канал: ${data.channel_name}\n${data.message_text.substring(0, 100)}...`
+            );
+
+            // Мигаем заголовком
+            let originalTitle = document.title;
+            let blinkInterval = setInterval(() => {
+                document.title = document.title === originalTitle ? '⚠️ НОВОЕ СООБЩЕНИЕ!' : originalTitle;
+            }, 1000);
+
+            // Останавливаем мигание через 30 секунд
+            setTimeout(() => {
+                clearInterval(blinkInterval);
+                document.title = originalTitle;
+            }, 30000);
+        });
+
+        // Подтверждение
+        confirmBtn.onclick = () => {
+            const name = userName.value.trim();
+            const confirmed = confirmCheck.checked;
+
+            if (!name) {
+                errorMessage.textContent = '❌ Пожалуйста, введите ваше имя!';
+                errorMessage.classList.add('show');
+                userName.focus();
+                return;
+            }
+
+            if (!confirmed) {
+                errorMessage.textContent = '❌ Пожалуйста, подтвердите проверку сообщений!';
+                errorMessage.classList.add('show');
+                return;
+            }
+
+            // Отправляем подтверждение на сервер
+            socket.emit('alert_confirmed', {
+                message_id: currentMessageId,
+                user_name: name
+            });
+
+            // Закрываем окно
+            modalOverlay.classList.remove('active');
+
+            // Восстанавливаем заголовок
+            document.title = 'Telegram Alerts - Мониторинг';
+        };
+
+        // Enter в поле имени
+        userName.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                confirmBtn.click();
+            }
+        });
+
+        // Блокируем закрытие окна по Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && modalOverlay.classList.contains('active')) {
+                e.preventDefault();
+                errorMessage.textContent = '❌ Окно нельзя закрыть без подтверждения!';
+                errorMessage.classList.add('show');
+                playAlertSound();
+            }
+        });
+
+        // Блокируем клик вне модального окна
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) {
+                e.preventDefault();
+                errorMessage.textContent = '❌ Окно нельзя закрыть без подтверждения!';
+                errorMessage.classList.add('show');
+                playAlertSound();
+            }
+        });
+
+        // При загрузке страницы
+        window.addEventListener('load', () => {
+            requestNotificationPermission();
+            initSound();
+        });
+    </script>
 </body>
 </html>
-
