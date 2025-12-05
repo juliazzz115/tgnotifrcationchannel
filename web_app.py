@@ -126,6 +126,14 @@ class TelegramMonitor:
             channel = await self.client.get_entity(self.channel_entity)
             logger.info(f"Канал: {channel.title} (ID: {channel.id})")
 
+            # ВАЖНО: Подписываемся на канал если ещё не подписаны
+            try:
+                from telethon.tl.functions.channels import JoinChannelRequest
+                await self.client(JoinChannelRequest(channel))
+                logger.info("✅ Подписан на канал")
+            except Exception as e:
+                logger.info(f"Подписка на канал (возможно уже подписан): {e}")
+
             @self.client.on(events.NewMessage(chats=self.channel_entity))
             async def handler(event):
                 await self._on_new_message(event)
