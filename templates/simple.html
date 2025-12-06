@@ -259,34 +259,22 @@
 
         socket.on('messages_update', (data) => {
             console.log('📥 Получены сообщения:', data);
-            // Фильтруем сообщения - только неподтвержденные и не старше 1 часа
-            const now = new Date();
-            const oneHourAgo = now.getTime() - (60 * 60 * 1000);
 
-            const filteredMessages = data.messages.filter(msg => {
+            if (!data.messages || data.messages.length === 0) {
+                // Если с сервера пришел пустой список - не трогаем allMessages!
+                // Там могут быть свежие сообщения из new_alert
+                return;
+            }
+
+            // Просто добавляем новые сообщения с сервера, если их нет в списке
+            data.messages.forEach(msg => {
                 // Пропускаем подтвержденные
-                if (confirmedIds.has(msg.id)) return false;
+                if (confirmedIds.has(msg.id)) return;
 
-                // Пропускаем старше часа
-                const msgDate = new Date(msg.date.split('.').reverse().join('-') + ' ' + msg.time);
-                if (msgDate.getTime() < oneHourAgo) return false;
-
-                return true;
-            });
-
-            // Добавляем сообщения с сервера в список, если их там ещё нет
-            filteredMessages.forEach(msg => {
                 const exists = allMessages.find(m => m.id === msg.id);
                 if (!exists) {
                     allMessages.push(msg);
                 }
-            });
-
-            // Удаляем только старые сообщения (по времени) и подтвержденные
-            // НЕ удаляем те, которых нет в filteredMessages (они могли прийти через new_alert)
-            allMessages = allMessages.filter(msg => {
-                const msgDate = new Date(msg.date.split('.').reverse().join('-') + ' ' + msg.time);
-                return msgDate.getTime() >= oneHourAgo && !confirmedIds.has(msg.id);
             });
 
             renderMessages(allMessages);
@@ -302,7 +290,11 @@
                 const existingIndex = allMessages.findIndex(m => m.id === data.message.id);
                 if (existingIndex === -1) {
                     allMessages.unshift(data.message); // Добавляем в начало
+                    console.log('✅ Сообщение добавлено в список. Всего сообщений:', allMessages.length);
+                    console.log('Список сообщений:', allMessages.map(m => m.id));
                     renderMessages(allMessages); // Перерисовываем список
+                } else {
+                    console.log('⚠️ Сообщение уже есть в списке');
                 }
 
                 playSound();
@@ -390,11 +382,33 @@
             const now = new Date();
             const oneHourAgo = now.getTime() - (60 * 60 * 1000);
 
-            // Удаляем старые сообщения из массива
+            // Удаляем старые сообщения из массива и подтвержденные
             const oldLength = allMessages.length;
             allMessages = allMessages.filter(msg => {
-                const msgDate = new Date(msg.date.split('.').reverse().join('-') + ' ' + msg.time);
-                return msgDate.getTime() >= oneHourAgo;
+                // Удаляем подтвержденные
+                if (confirmedIds.has(msg.id)) return false;
+
+                // Проверяем возраст сообщения
+                if (!msg.date || !msg.time) {
+                    // Если нет даты - оставляем (свежее сообщение)
+                    return true;
+                }
+
+                try {
+                    const msgDate = new Date(msg.date.split('.').reverse().join('-') + ' ' + msg.time);
+                    const msgTime = msgDate.getTime();
+
+                    if (isNaN(msgTime)) {
+                        // Если не можем распарсить - оставляем
+                        return true;
+                    }
+
+                    return msgTime >= oneHourAgo;
+                } catch (e) {
+                    // Ошибка парсинга - оставляем сообщение
+                    console.log('Ошибка парсинга даты для сообщения', msg.id, e);
+                    return true;
+                }
             });
 
             // Если были удалены - перерисовываем список
@@ -419,6 +433,10 @@
         }
 
         function closeModal() {
+            console.log('❌ Нажата кнопка "Позже" для сообщения', currentMessageId);
+            console.log('Сообщение остается в списке. Всего сообщений:', allMessages.length);
+            console.log('Список ID:', allMessages.map(m => m.id));
+
             document.getElementById('modal').classList.remove('show');
             stopSound();
 
