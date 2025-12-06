@@ -40,6 +40,7 @@ session_exists = os.path.exists('telegram_session.session')
 
 # Переменные для setup
 temp_client = None
+temp_loop = None  # Сохраняем event loop для повторного использования
 phone_number = None
 phone_code_hash = None
 
@@ -191,7 +192,7 @@ def setup():
 @app.route('/api/send_code', methods=['POST'])
 def send_code():
     """Отправить код на телефон"""
-    global temp_client, phone_number, phone_code_hash
+    global temp_client, temp_loop, phone_number, phone_code_hash
 
     data = request.json
     phone_number = data.get('phone')
@@ -209,6 +210,9 @@ def send_code():
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+
+        # Сохраняем loop для использования в verify_code
+        temp_loop = loop
 
         # Теперь создаем клиент - у потока уже есть event loop
         temp_client = TelegramClient('telegram_session_NEW', int(API_ID), API_HASH)
@@ -233,24 +237,17 @@ def send_code():
 @app.route('/api/verify_code', methods=['POST'])
 def verify_code():
     """Проверить код и создать сессию"""
-    global temp_client, phone_number, phone_code_hash, session_exists
+    global temp_client, temp_loop, phone_number, phone_code_hash, session_exists
 
     data = request.json
     code = data.get('code')
 
-    if not code or not temp_client:
+    if not code or not temp_client or not temp_loop:
         return jsonify({'error': 'Сначала отправьте код на телефон'}), 400
 
     try:
-        # Получаем или создаем event loop
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_closed():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        # ВАЖНО: используем ТОТ ЖЕ event loop что и при создании клиента!
+        asyncio.set_event_loop(temp_loop)
 
         async def sign_in():
             try:
@@ -262,7 +259,7 @@ def verify_code():
             await temp_client.disconnect()
             return me
 
-        me = loop.run_until_complete(sign_in())
+        me = temp_loop.run_until_complete(sign_in())
 
         if isinstance(me, dict) and 'error' in me:
             return jsonify(me), 400
