@@ -225,8 +225,8 @@ def send_code():
         # Сохраняем loop для использования в verify_code
         temp_loop = loop
 
-        # Теперь создаем клиент - у потока уже есть event loop
-        temp_client = TelegramClient('telegram_session_NEW', int(API_ID), API_HASH)
+        # Создаем клиент с пустым StringSession для setup
+        temp_client = TelegramClient(StringSession(), int(API_ID), API_HASH)
 
         async def send():
             await temp_client.connect()
