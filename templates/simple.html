@@ -402,6 +402,9 @@
         function closeModal() {
             document.getElementById('modal').classList.remove('show');
             stopSound();
+
+            // НЕ добавляем в confirmedIds - сообщение остается активным!
+            // Просто закрываем окно, звук останавливается
         }
 
         function confirmMessage() {
