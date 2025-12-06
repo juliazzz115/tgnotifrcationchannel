@@ -173,15 +173,16 @@
             <div class="success" style="text-align: center; padding: 30px;">
                 <h2 style="margin-bottom: 20px;">✅ Готово!</h2>
                 <p style="font-size: 18px; margin-bottom: 20px;">Сессия успешно создана!</p>
-                <p style="font-size: 16px; font-weight: normal;">Теперь нужно:</p>
-                <ol style="text-align: left; margin: 20px 0; font-weight: normal;">
-                    <li style="margin: 10px 0;">Загрузить файл <code>telegram_session.session</code> в GitHub</li>
-                    <li style="margin: 10px 0;">Перезапустить приложение в Railway</li>
-                    <li style="margin: 10px 0;">Открыть главную страницу</li>
-                </ol>
+                <p style="font-size: 16px; font-weight: normal; margin-bottom: 20px;">
+                    Теперь нажмите кнопку ниже чтобы автоматически загрузить сессию в GitHub и перезапустить приложение:
+                </p>
             </div>
 
-            <button onclick="window.location.href='/'" style="background: #10b981;">Перейти к приложению</button>
+            <div id="uploadResult" style="display: none; margin-bottom: 20px;"></div>
+
+            <button onclick="uploadSession()" id="uploadBtn" style="background: #667eea;">
+                🚀 Загрузить и перезапустить
+            </button>
         </div>
     </div>
 
@@ -289,6 +290,49 @@
         document.getElementById('codeInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') verifyCode();
         });
+
+        async function uploadSession() {
+            const resultDiv = document.getElementById('uploadResult');
+            const btn = document.getElementById('uploadBtn');
+
+            resultDiv.style.display = 'none';
+            btn.disabled = true;
+            btn.textContent = 'Загружаю...';
+
+            try {
+                const response = await fetch('/api/upload_session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultDiv.className = 'success';
+                    resultDiv.textContent = data.message + ' Подождите 1-2 минуты, затем обновите страницу.';
+                    resultDiv.style.display = 'block';
+
+                    // Через 3 секунды перезагружаем страницу
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 3000);
+                } else {
+                    resultDiv.className = 'error';
+                    resultDiv.textContent = data.error || 'Ошибка загрузки';
+                    resultDiv.style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = '🚀 Загрузить и перезапустить';
+                }
+            } catch (e) {
+                resultDiv.className = 'error';
+                resultDiv.textContent = 'Ошибка соединения: ' + e.message;
+                resultDiv.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = '🚀 Загрузить и перезапустить';
+            }
+        }
     </script>
 </body>
 </html>
