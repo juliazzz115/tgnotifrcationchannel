@@ -274,7 +274,7 @@
                 return true;
             });
 
-            // Обновляем массив всех сообщений (объединяем с уже показанными через new_alert)
+            // Добавляем сообщения с сервера в список, если их там ещё нет
             filteredMessages.forEach(msg => {
                 const exists = allMessages.find(m => m.id === msg.id);
                 if (!exists) {
@@ -282,10 +282,11 @@
                 }
             });
 
-            // Удаляем из массива те, которых нет в filteredMessages (устаревшие)
+            // Удаляем только старые сообщения (по времени) и подтвержденные
+            // НЕ удаляем те, которых нет в filteredMessages (они могли прийти через new_alert)
             allMessages = allMessages.filter(msg => {
-                return filteredMessages.find(m => m.id === msg.id) ||
-                       (new Date(msg.date.split('.').reverse().join('-') + ' ' + msg.time).getTime() >= oneHourAgo);
+                const msgDate = new Date(msg.date.split('.').reverse().join('-') + ' ' + msg.time);
+                return msgDate.getTime() >= oneHourAgo && !confirmedIds.has(msg.id);
             });
 
             renderMessages(allMessages);
