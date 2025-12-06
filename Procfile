@@ -1,1 +1,1 @@
-web: python setup_session.py
+web: python web_app.py

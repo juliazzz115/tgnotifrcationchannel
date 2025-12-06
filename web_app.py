@@ -1,21 +1,22 @@
 """
-TELEGRAM ALERTS - МАКСИМАЛЬНО ПРОСТАЯ И НАДЕЖНАЯ ВЕРСИЯ
-Сканирование канала каждые 5 секунд
+TELEGRAM ALERTS - ПРОСТАЯ ВЕРСИЯ
+С автоматическим переходом на страницу настройки если нет сессии
 """
 import os
 import asyncio
 import logging
 from datetime import datetime
 from threading import Thread
-from flask import Flask, render_template
+from flask import Flask, render_template, request, jsonify, redirect
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from dotenv import load_dotenv
 from telethon import TelegramClient
+from telethon.errors import SessionPasswordNeededError
 
 load_dotenv()
 
-# ЛОГИРОВАНИЕ - максимально подробное
+# ЛОГИРОВАНИЕ
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -33,8 +34,18 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Глобальные переменные
 telegram_client = None
-all_messages = []  # Все сообщения из канала
-last_check_id = None  # ID последнего проверенного сообщения
+all_messages = []
+last_check_id = None
+session_exists = os.path.exists('telegram_session.session')
+
+# Переменные для setup
+temp_client = None
+phone_number = None
+phone_code_hash = None
+
+API_ID = os.getenv('API_ID')
+API_HASH = os.getenv('API_HASH')
+CHANNEL_ID = os.getenv('CHANNEL_ID', '@utraci')
 
 
 class SimpleScanner:
@@ -45,18 +56,14 @@ class SimpleScanner:
         logger.info("ИНИЦИАЛИЗАЦИЯ СКАНЕРА")
         logger.info("=" * 80)
 
-        self.api_id = os.getenv('API_ID')
-        self.api_hash = os.getenv('API_HASH')
-        self.channel_id = os.getenv('CHANNEL_ID', '@utraci')
+        logger.info(f"API_ID: {API_ID}")
+        logger.info(f"API_HASH: {API_HASH[:10]}..." if API_HASH else "API_HASH: НЕ УСТАНОВЛЕН")
+        logger.info(f"CHANNEL_ID: {CHANNEL_ID}")
 
-        logger.info(f"API_ID: {self.api_id}")
-        logger.info(f"API_HASH: {self.api_hash[:10]}..." if self.api_hash else "API_HASH: НЕ УСТАНОВЛЕН")
-        logger.info(f"CHANNEL_ID: {self.channel_id}")
-
-        if not self.api_id or not self.api_hash:
+        if not API_ID or not API_HASH:
             raise ValueError("НЕ УКАЗАНЫ API_ID или API_HASH!")
 
-        self.client = TelegramClient('telegram_session', int(self.api_id), self.api_hash)
+        self.client = TelegramClient('telegram_session', int(API_ID), API_HASH)
         logger.info("✅ TelegramClient создан")
 
     async def scan_forever(self):
@@ -74,8 +81,8 @@ class SimpleScanner:
             me = await self.client.get_me()
             logger.info(f"✅ АВТОРИЗОВАН: {me.first_name} (@{me.username})")
 
-            logger.info(f"Получаю информацию о канале: {self.channel_id}")
-            channel = await self.client.get_entity(self.channel_id)
+            logger.info(f"Получаю информацию о канале: {CHANNEL_ID}")
+            channel = await self.client.get_entity(CHANNEL_ID)
             logger.info(f"✅ КАНАЛ НАЙДЕН: {channel.title} (ID: {channel.id})")
 
             logger.info("=" * 80)
@@ -91,11 +98,10 @@ class SimpleScanner:
                 logger.info(f"{'='*80}")
 
                 try:
-                    # Получаем последние 10 сообщений
                     logger.info("Получаю последние 10 сообщений из канала...")
                     messages = []
 
-                    async for message in self.client.iter_messages(self.channel_id, limit=10):
+                    async for message in self.client.iter_messages(CHANNEL_ID, limit=10):
                         if message.text:
                             msg_data = {
                                 'id': message.id,
@@ -108,14 +114,10 @@ class SimpleScanner:
 
                     logger.info(f"✅ Получено {len(messages)} сообщений")
 
-                    # Обновляем глобальный список
                     all_messages = messages
-
-                    # Отправляем всем клиентам
                     logger.info("Отправляю обновление всем подключенным клиентам...")
                     socketio.emit('messages_update', {'messages': messages})
 
-                    # Проверяем на новые
                     if messages:
                         newest_id = messages[0]['id']
 
@@ -132,7 +134,6 @@ class SimpleScanner:
                             logger.info(f"🔔 ОБНАРУЖЕНО {new_count} НОВЫХ СООБЩЕНИЙ!")
                             logger.info("!" * 80)
 
-                            # Отправляем алерт
                             for msg in messages:
                                 if msg['id'] > last_check_id:
                                     logger.info(f"📢 НОВОЕ СООБЩЕНИЕ #{msg['id']}: {msg['text'][:100]}")
@@ -155,6 +156,10 @@ class SimpleScanner:
 
 def run_scanner():
     """Запуск сканера в потоке"""
+    if not session_exists:
+        logger.info("⚠️  Нет session файла - сканер НЕ запускается")
+        return
+
     logger.info("🚀 ЗАПУСК ПОТОКА СКАНЕРА")
     try:
         loop = asyncio.new_event_loop()
@@ -168,18 +173,114 @@ def run_scanner():
 
 @app.route('/')
 def index():
+    """Главная страница - перенаправляет на setup если нет сессии"""
+    if not session_exists:
+        logger.info("📄 Нет сессии - перенаправление на /setup")
+        return redirect('/setup')
+
     logger.info("📄 Запрос главной страницы")
     return render_template('simple.html')
+
+
+@app.route('/setup')
+def setup():
+    """Страница настройки сессии"""
+    return render_template('setup.html')
+
+
+@app.route('/api/send_code', methods=['POST'])
+def send_code():
+    """Отправить код на телефон"""
+    global temp_client, phone_number, phone_code_hash
+
+    data = request.json
+    phone_number = data.get('phone')
+
+    if not phone_number:
+        return jsonify({'error': 'Укажите номер телефона'}), 400
+
+    try:
+        temp_client = TelegramClient('telegram_session_NEW', int(API_ID), API_HASH)
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        async def send():
+            await temp_client.connect()
+            result = await temp_client.send_code_request(phone_number)
+            return result.phone_code_hash
+
+        phone_code_hash = loop.run_until_complete(send())
+
+        return jsonify({
+            'success': True,
+            'message': f'Код отправлен на номер {phone_number}'
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/verify_code', methods=['POST'])
+def verify_code():
+    """Проверить код и создать сессию"""
+    global temp_client, phone_number, phone_code_hash, session_exists
+
+    data = request.json
+    code = data.get('code')
+
+    if not code or not temp_client:
+        return jsonify({'error': 'Сначала отправьте код на телефон'}), 400
+
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        async def sign_in():
+            try:
+                await temp_client.sign_in(phone_number, code, phone_code_hash=phone_code_hash)
+            except SessionPasswordNeededError:
+                return {'error': 'У вас включена двухфакторная аутентификация. Этот интерфейс пока не поддерживает 2FA.'}
+
+            me = await temp_client.get_me()
+            await temp_client.disconnect()
+            return me
+
+        me = loop.run_until_complete(sign_in())
+
+        if isinstance(me, dict) and 'error' in me:
+            return jsonify(me), 400
+
+        # Удаляем старую сессию
+        if os.path.exists('telegram_session.session'):
+            os.remove('telegram_session.session')
+
+        # Переименовываем новую сессию
+        if os.path.exists('telegram_session_NEW.session'):
+            os.rename('telegram_session_NEW.session', 'telegram_session.session')
+            session_exists = True
+
+        return jsonify({
+            'success': True,
+            'message': f'✅ Авторизация успешна! Привет, {me.first_name}! Теперь перезапустите приложение в Railway.',
+            'user': {
+                'first_name': me.first_name,
+                'username': me.username
+            }
+        })
+
+    except Exception as e:
+        return jsonify({'error': f'Ошибка: {str(e)}'}), 500
 
 
 @app.route('/api/status')
 def status():
     is_connected = telegram_client and telegram_client.is_connected()
-    logger.info(f"📊 Запрос статуса: connected={is_connected}, messages={len(all_messages)}")
     return {
         'connected': is_connected,
         'messages_count': len(all_messages),
-        'last_id': last_check_id
+        'last_id': last_check_id,
+        'session_exists': session_exists
     }
 
 
@@ -188,7 +289,6 @@ def handle_connect():
     logger.info(f"✅ Клиент подключен")
     emit('connected', {'status': 'ok'})
 
-    # Отправляем текущие сообщения
     if all_messages:
         logger.info(f"Отправляю {len(all_messages)} сообщений новому клиенту")
         emit('messages_update', {'messages': all_messages})
@@ -210,11 +310,15 @@ if __name__ == '__main__':
     logger.info("=" * 80)
     logger.info("ЗАПУСК СЕРВЕРА")
     logger.info("=" * 80)
+    logger.info(f"Session файл существует: {session_exists}")
 
-    # Запускаем сканер
-    scanner_thread = Thread(target=run_scanner, daemon=True)
-    scanner_thread.start()
-    logger.info("✅ Поток сканера запущен")
+    if session_exists:
+        # Запускаем сканер только если есть сессия
+        scanner_thread = Thread(target=run_scanner, daemon=True)
+        scanner_thread.start()
+        logger.info("✅ Поток сканера запущен")
+    else:
+        logger.info("⚠️  НЕТ SESSION ФАЙЛА - откройте главную страницу для настройки")
 
     port = int(os.getenv('PORT', '5000'))
     logger.info(f"🌐 Запуск веб-сервера на порту {port}")
