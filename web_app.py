@@ -1,17 +1,17 @@
 """
 Веб-сервер для Telegram Desktop Alerts
-Показывает полноэкранные уведомления в браузере
+ПРОСТОЕ И НАДЕЖНОЕ СКАНИРОВАНИЕ КАНАЛА
 """
 import os
 import asyncio
 import logging
-from datetime import datetime
-from threading import Thread, Timer
+from datetime import datetime, timedelta
+from threading import Thread
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from dotenv import load_dotenv
-from telethon import TelegramClient, events
+from telethon import TelegramClient
 from telethon.tl.types import Message
 
 # Загружаем переменные окружения
@@ -46,19 +46,19 @@ socketio = SocketIO(
 
 # Глобальные переменные
 telegram_client = None
-pending_alerts = {}
-unread_alerts = []  # Очередь непрочитанных уведомлений
+last_message_id = None  # ID последнего просмотренного сообщения
+confirmed_messages = set()  # ID подтвержденных сообщений
 
 
-class TelegramMonitor:
-    """Класс для мониторинга Telegram канала"""
+class TelegramScanner:
+    """Класс для СКАНИРОВАНИЯ Telegram канала (не ждем события, а проверяем сами!)"""
 
     def __init__(self, socketio_instance):
         self.socketio = socketio_instance
         self.api_id = os.getenv('API_ID')
         self.api_hash = os.getenv('API_HASH')
         self.channel_id = os.getenv('CHANNEL_ID')
-        self.alert_delay = int(os.getenv('ALERT_DELAY', '5'))  # Временно 5 секунд для отладки
+        self.scan_interval = 3  # Сканируем каждые 3 секунды
 
         if not self.api_id or not self.api_hash or not self.channel_id:
             raise ValueError("Необходимо заполнить API_ID, API_HASH и CHANNEL_ID в файле .env")
@@ -72,123 +72,122 @@ class TelegramMonitor:
                 raise ValueError(f"CHANNEL_ID должен быть числом или начинаться с @")
 
         self.client = TelegramClient('telegram_session', int(self.api_id), self.api_hash)
+        self.running = True
 
-        logger.info(f"TelegramMonitor инициализирован")
-        logger.info(f"Канал: {self.channel_entity}, Задержка: {self.alert_delay} сек")
+        logger.info(f"TelegramScanner инициализирован")
+        logger.info(f"Канал: {self.channel_entity}, Интервал сканирования: {self.scan_interval} сек")
 
-    def _send_alert(self, message_text: str, channel_name: str, message_id: int):
-        """Отправить уведомление в браузер"""
-        global unread_alerts
+    async def get_recent_messages(self, limit=20):
+        """Получить последние сообщения из канала"""
         try:
-            logger.info(f"Отправка уведомления в браузер (ID: {message_id})")
-
-            alert_data = {
-                'message_id': message_id,
-                'message_text': message_text,
-                'channel_name': channel_name,
-                'timestamp': datetime.now().strftime('%H:%M:%S'),
-                'date': datetime.now().strftime('%d.%m.%Y')
-            }
-
-            # Добавляем в очередь непрочитанных
-            unread_alerts.append(alert_data)
-            logger.info(f"Добавлено в очередь. Всего непрочитанных: {len(unread_alerts)}")
-
-            # Отправляем всем подключенным клиентам
-            self.socketio.emit('new_alert', alert_data, namespace='/')
-            logger.info("Уведомление отправлено всем клиентам")
-
+            messages = []
+            async for message in self.client.iter_messages(self.channel_entity, limit=limit):
+                if message.text:  # Только текстовые сообщения
+                    messages.append({
+                        'id': message.id,
+                        'text': message.text,
+                        'date': message.date.strftime('%d.%m.%Y'),
+                        'time': message.date.strftime('%H:%M:%S')
+                    })
+            return messages
         except Exception as e:
-            logger.error(f"Ошибка отправки: {e}", exc_info=True)
+            logger.error(f"Ошибка получения сообщений: {e}")
+            return []
 
-    def _schedule_alert(self, message: Message, channel_name: str):
-        """Запланировать уведомление через заданное время"""
-        message_id = message.id
-        message_text = message.text or "[Без текста]"
+    async def scan_loop(self):
+        """Бесконечный цикл сканирования канала"""
+        global last_message_id
 
-        if message_id in pending_alerts:
-            pending_alerts[message_id].cancel()
+        logger.info("=" * 80)
+        logger.info("🚀 ЗАПУСК СКАНЕРА КАНАЛА")
+        logger.info("=" * 80)
 
-        def send_alert():
-            if message_id in pending_alerts:
-                del pending_alerts[message_id]
-            self._send_alert(message_text, channel_name, message_id)
+        await self.client.start()
+        me = await self.client.get_me()
+        logger.info(f"✅ Авторизован: {me.first_name} (@{me.username})")
 
-        timer = Timer(self.alert_delay, send_alert)
-        timer.start()
-        pending_alerts[message_id] = timer
+        channel = await self.client.get_entity(self.channel_entity)
+        logger.info(f"✅ Подключен к каналу: {channel.title} (ID: {channel.id})")
 
-        logger.info(f"Уведомление запланировано через {self.alert_delay} сек")
-
-    async def _on_new_message(self, event: events.NewMessage.Event):
-        """Обработчик новых сообщений"""
+        # Подписываемся на канал если ещё не подписаны
         try:
-            message = event.message
-            chat = await event.get_chat()
-            channel_name = getattr(chat, 'title', str(self.channel_entity))
-
-            logger.info("=" * 80)
-            logger.info(f"🔔 НОВОЕ СООБЩЕНИЕ ОБНАРУЖЕНО!")
-            logger.info(f"📢 Канал: '{channel_name}'")
-            logger.info(f"🆔 ID сообщения: {message.id}")
-            logger.info(f"💬 Текст: {message.text[:100] if message.text else '[Без текста]'}...")
-            logger.info(f"⏰ Время получения: {datetime.now().strftime('%H:%M:%S')}")
-            logger.info("=" * 80)
-
-            self._schedule_alert(message, channel_name)
+            from telethon.tl.functions.channels import JoinChannelRequest
+            await self.client(JoinChannelRequest(channel))
+            logger.info("✅ Подписан на канал")
         except Exception as e:
-            logger.error(f"❌ Ошибка обработки сообщения: {e}", exc_info=True)
+            logger.info(f"Подписка: {e}")
+
+        logger.info("=" * 80)
+        logger.info("🔍 НАЧИНАЮ СКАНИРОВАНИЕ КАНАЛА КАЖДЫЕ 3 СЕКУНДЫ")
+        logger.info("=" * 80)
+
+        while self.running:
+            try:
+                # Получаем последние сообщения
+                messages = await self.get_recent_messages(limit=20)
+
+                if messages:
+                    # Отправляем все сообщения клиентам
+                    self.socketio.emit('messages_update', {
+                        'messages': messages,
+                        'channel_name': channel.title
+                    }, namespace='/')
+
+                    # Проверяем есть ли НОВЫЕ сообщения
+                    newest_message_id = messages[0]['id']
+
+                    if last_message_id is None:
+                        # Первый запуск - запоминаем последнее сообщение
+                        last_message_id = newest_message_id
+                        logger.info(f"📌 Инициализация: последнее сообщение ID {last_message_id}")
+                    elif newest_message_id > last_message_id:
+                        # Есть НОВЫЕ сообщения!
+                        new_messages = [m for m in messages if m['id'] > last_message_id]
+
+                        logger.info("=" * 80)
+                        logger.info(f"🔔 ОБНАРУЖЕНО {len(new_messages)} НОВЫХ СООБЩЕНИЙ!")
+                        logger.info("=" * 80)
+
+                        for msg in reversed(new_messages):  # От старых к новым
+                            if msg['id'] not in confirmed_messages:
+                                logger.info(f"📢 НОВОЕ: ID {msg['id']}")
+                                logger.info(f"💬 Текст: {msg['text'][:100]}...")
+                                logger.info(f"⏰ Время: {msg['time']}")
+
+                                # Отправляем уведомление о НОВОМ сообщении
+                                self.socketio.emit('new_message_alert', {
+                                    'message': msg,
+                                    'channel_name': channel.title
+                                }, namespace='/')
+
+                        last_message_id = newest_message_id
+
+                # Ждем перед следующим сканированием
+                await asyncio.sleep(self.scan_interval)
+
+            except Exception as e:
+                logger.error(f"❌ Ошибка сканирования: {e}", exc_info=True)
+                await asyncio.sleep(self.scan_interval)
 
     async def start(self):
-        """Запуск мониторинга"""
+        """Запуск сканера"""
         try:
-            logger.info("Запуск Telegram клиента...")
-            await self.client.start()
-
-            me = await self.client.get_me()
-            logger.info(f"Авторизован: {me.first_name} (@{me.username})")
-
-            channel = await self.client.get_entity(self.channel_entity)
-            logger.info(f"Канал: {channel.title} (ID: {channel.id})")
-
-            # ВАЖНО: Подписываемся на канал если ещё не подписаны
-            try:
-                from telethon.tl.functions.channels import JoinChannelRequest
-                await self.client(JoinChannelRequest(channel))
-                logger.info("✅ Подписан на канал")
-            except Exception as e:
-                logger.info(f"Подписка на канал (возможно уже подписан): {e}")
-
-            # Регистрируем обработчик используя add_event_handler (более надежный метод)
-            # Используем объект канала напрямую вместо попыток угадать ID форматы
-            logger.info(f"Регистрация обработчика для канала: {channel.title} (ID: {channel.id})")
-
-            # Используем add_event_handler для надежной регистрации
-            self.client.add_event_handler(
-                self._on_new_message,
-                events.NewMessage(chats=[channel])
-            )
-
-            logger.info("✅ Мониторинг запущен! Обработчик зарегистрирован для всех новых сообщений в канале.")
-            logger.info(f"🔔 Жду новые сообщения в канале '{channel.title}'...")
-            await self.client.run_until_disconnected()
-
+            await self.scan_loop()
         except Exception as e:
-            logger.error(f"Ошибка мониторинга: {e}", exc_info=True)
+            logger.error(f"Критическая ошибка сканера: {e}", exc_info=True)
             raise
 
 
-def run_telegram_monitor():
-    """Запуск монитора в отдельном потоке"""
+def run_telegram_scanner():
+    """Запуск сканера в отдельном потоке"""
     global telegram_client
     try:
-        # Создаем event loop ПЕРЕД созданием TelegramMonitor
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-        monitor = TelegramMonitor(socketio)
-        telegram_client = monitor.client
-        loop.run_until_complete(monitor.start())
+        scanner = TelegramScanner(socketio)
+        telegram_client = scanner.client
+        loop.run_until_complete(scanner.start())
     except Exception as e:
         logger.error(f"Ошибка: {e}", exc_info=True)
 
@@ -196,7 +195,7 @@ def run_telegram_monitor():
 @app.route('/')
 def index():
     """Главная страница"""
-    return render_template('alert.html')
+    return render_template('messages.html')
 
 
 @app.route('/api/status')
@@ -205,8 +204,8 @@ def status():
     return {
         'status': 'running',
         'telegram_connected': telegram_client is not None and telegram_client.is_connected(),
-        'pending_alerts': len(pending_alerts),
-        'unread_alerts': len(unread_alerts)
+        'last_message_id': last_message_id,
+        'confirmed_count': len(confirmed_messages)
     }
 
 
@@ -219,7 +218,7 @@ def status_page():
     <html>
     <head>
         <meta charset="utf-8">
-        <title>Статус подключения</title>
+        <title>Статус сканера</title>
         <style>
             body {{
                 font-family: Arial, sans-serif;
@@ -265,13 +264,6 @@ def status_page():
                 margin: 15px 0;
                 line-height: 1.6;
             }}
-            .warning {{
-                background: #fef3c7;
-                padding: 15px;
-                border-radius: 8px;
-                margin: 15px 0;
-                color: #92400e;
-            }}
             a {{
                 color: #667eea;
                 text-decoration: none;
@@ -288,37 +280,35 @@ def status_page():
             }}
         </style>
         <script>
-            // Автообновление каждые 5 секунд
             setTimeout(() => location.reload(), 5000);
         </script>
     </head>
     <body>
         <div class="container">
-            <h1>📊 Статус подключения</h1>
+            <h1>🔍 Статус сканера</h1>
 
             <div class="status {'connected' if is_connected else 'disconnected'}">
-                {'✅ Telegram подключен' if is_connected else '❌ Telegram НЕ подключен'}
+                {'✅ Telegram подключен - СКАНИРУЮ КАНАЛ' if is_connected else '❌ Telegram НЕ подключен'}
             </div>
 
             <div class="info">
-                <strong>Канал для мониторинга:</strong><br>
+                <strong>Канал:</strong><br>
                 {os.getenv('CHANNEL_ID', 'не указан')}
             </div>
 
             <div class="info">
-                <strong>Задержка уведомлений:</strong><br>
-                {os.getenv('ALERT_DELAY', '60')} секунд
+                <strong>Режим работы:</strong><br>
+                Сканирование каждые 3 секунды
             </div>
 
-            {'<div class="info"><strong>✅ Всё работает!</strong><br>Сервер мониторит канал. Когда придет сообщение - появится уведомление.</div>' if is_connected else '<div class="warning"><strong>⚠️ Telegram не подключен!</strong><br><br>Возможные причины:<br>• Не указаны API_ID и API_HASH<br>• Неправильный CHANNEL_ID<br>• Требуется авторизация (номер телефона и код)<br>• Проверьте логи сервера</div>'}
+            {'<div class="info"><strong>✅ Работает!</strong><br>Сканер проверяет канал каждые 3 секунды и сразу покажет новые сообщения!</div>' if is_connected else '<div class="info" style="background: #fee2e2; color: #991b1b;"><strong>⚠️ Не подключен!</strong><br>Проверьте логи</div>'}
 
             <div style="margin-top: 30px; text-align: center;">
                 <a href="/" class="button">Главная</a>
-                <a href="/test" class="button">Тест уведомления</a>
             </div>
 
             <div class="info" style="margin-top: 20px; font-size: 14px; color: #666;">
-                Страница обновляется каждые 5 секунд
+                Обновление каждые 5 секунд
             </div>
         </div>
     </body>
@@ -327,134 +317,44 @@ def status_page():
     return status_html
 
 
-@app.route('/test')
-def send_test_alert():
-    """Отправить тестовое уведомление - просто откройте этот URL!"""
-    test_message = """📋 *Чаты без ответа MCG1 (сегодня):*
-
-– KIRYL ILYENKOU (15:32)
-  💬 понял, спасибо
-
-– Yelyzaveta Bachiieva (15:02)
-  💬 Будут скорее эти и еще какие-то ,я отпишу сегодня - завтра
-
-– Volodymyr SMIRNOV JDG L (13:29)
-  💬 Да, буду пробовать на следующей неделе!
-
-– Polina VITARO SPÓŁKA (13:18)
-  💬 Здравствуйте
-К сожалению нет
-В понедельник займусь и этим и договором
-
-– Павел (13:09)
-  💬 Уточните и я им отпишу 🙏"""
-
-    from datetime import datetime
-
-    # Отправляем тестовое уведомление всем подключенным клиентам
-    socketio.emit('new_alert', {
-        'message_id': 99999,
-        'message_text': test_message,
-        'channel_name': '🧪 ТЕСТОВЫЙ КАНАЛ',
-        'timestamp': datetime.now().strftime('%H:%M:%S'),
-        'date': datetime.now().strftime('%d.%m.%Y')
-    }, namespace='/')
-
-    logger.info("Отправлено тестовое уведомление")
-
-    return """
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <title>Тест отправлен!</title>
-        <style>
-            body {
-                font-family: Arial, sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                margin: 0;
-            }
-            .container {
-                background: white;
-                padding: 40px;
-                border-radius: 20px;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-                text-align: center;
-                max-width: 500px;
-            }
-            h1 { color: #10b981; }
-            p { color: #666; line-height: 1.6; }
-            a {
-                display: inline-block;
-                margin-top: 20px;
-                padding: 12px 24px;
-                background: #667eea;
-                color: white;
-                text-decoration: none;
-                border-radius: 8px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>✅ Тестовое уведомление отправлено!</h1>
-            <p>Посмотрите на вкладку с главной страницей - должно появиться большое красное окно!</p>
-            <p>Если вкладка не открыта, <a href="/">откройте её сначала</a></p>
-            <a href="/test">Отправить ещё раз</a>
-        </div>
-    </body>
-    </html>
-    """
-
-
 @socketio.on('connect')
 def handle_connect():
     """Подключение клиента"""
-    global unread_alerts
-    logger.info(f"Клиент подключен: {request.sid}")
+    logger.info(f"✅ Клиент подключен: {request.sid}")
     emit('connected', {'status': 'ok'})
-
-    # Отправляем все непрочитанные уведомления новому клиенту
-    if unread_alerts:
-        logger.info(f"Отправка {len(unread_alerts)} непрочитанных уведомлений клиенту {request.sid}")
-        for alert in unread_alerts:
-            emit('new_alert', alert)
-            logger.info(f"Отправлено уведомление ID {alert['message_id']} клиенту {request.sid}")
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """Отключение клиента"""
-    logger.info(f"Клиент отключен: {request.sid}")
+    logger.info(f"❌ Клиент отключен: {request.sid}")
 
 
-@socketio.on('alert_confirmed')
-def handle_confirmed(data):
-    """Подтверждение уведомления"""
-    global unread_alerts
+@socketio.on('confirm_message')
+def handle_confirm(data):
+    """Подтверждение просмотра сообщения"""
+    global confirmed_messages
     message_id = data.get('message_id')
     user_name = data.get('user_name')
-    logger.info(f"Уведомление {message_id} подтверждено пользователем: {user_name}")
 
-    # Удаляем из очереди непрочитанных
-    unread_alerts = [alert for alert in unread_alerts if alert['message_id'] != message_id]
-    logger.info(f"Уведомление {message_id} удалено из очереди. Осталось непрочитанных: {len(unread_alerts)}")
+    confirmed_messages.add(message_id)
+    logger.info(f"✅ Сообщение {message_id} подтверждено пользователем: {user_name}")
+    logger.info(f"📊 Всего подтверждено: {len(confirmed_messages)}")
 
     emit('confirmation_received', {'message_id': message_id})
 
 
 if __name__ == '__main__':
-    # Запуск Telegram монитора
-    telegram_thread = Thread(target=run_telegram_monitor, daemon=True)
-    telegram_thread.start()
+    # Запуск Telegram сканера
+    scanner_thread = Thread(target=run_telegram_scanner, daemon=True)
+    scanner_thread.start()
 
     port = int(os.getenv('PORT', '5000'))
     host = os.getenv('HOST', '0.0.0.0')
 
-    logger.info(f"🚀 Сервер: http://localhost:{port}")
+    logger.info("=" * 80)
+    logger.info(f"🚀 Сервер запущен: http://localhost:{port}")
     logger.info(f"📱 Откройте эту ссылку в браузере!")
+    logger.info("=" * 80)
 
     socketio.run(app, host=host, port=port, debug=False, allow_unsafe_werkzeug=True)
