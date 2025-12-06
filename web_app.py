@@ -12,6 +12,7 @@ from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from dotenv import load_dotenv
 from telethon import TelegramClient
+from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError
 
 load_dotenv()
@@ -36,7 +37,10 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 telegram_client = None
 all_messages = []
 last_check_id = None
-session_exists = os.path.exists('telegram_session.session')
+
+# Проверяем наличие сессии - либо StringSession в переменных, либо файл
+SESSION_STRING = os.getenv('SESSION_STRING')
+session_exists = bool(SESSION_STRING) or os.path.exists('telegram_session.session')
 
 # Переменные для setup
 temp_client = None
@@ -64,7 +68,14 @@ class SimpleScanner:
         if not API_ID or not API_HASH:
             raise ValueError("НЕ УКАЗАНЫ API_ID или API_HASH!")
 
-        self.client = TelegramClient('telegram_session', int(API_ID), API_HASH)
+        # Используем StringSession если есть переменная окружения (более стабильно при смене IP)
+        if SESSION_STRING:
+            logger.info("📝 Используется StringSession из переменной окружения")
+            self.client = TelegramClient(StringSession(SESSION_STRING), int(API_ID), API_HASH)
+        else:
+            logger.info("📁 Используется файл telegram_session.session")
+            self.client = TelegramClient('telegram_session', int(API_ID), API_HASH)
+
         logger.info("✅ TelegramClient создан")
 
     async def scan_forever(self):
@@ -264,22 +275,19 @@ def verify_code():
         if isinstance(me, dict) and 'error' in me:
             return jsonify(me), 400
 
-        # Удаляем старую сессию
-        if os.path.exists('telegram_session.session'):
-            os.remove('telegram_session.session')
+        # Получаем StringSession для сохранения в переменной окружения
+        session_string = temp_client.session.save()
 
-        # Переименовываем новую сессию
-        if os.path.exists('telegram_session_NEW.session'):
-            os.rename('telegram_session_NEW.session', 'telegram_session.session')
-            session_exists = True
+        logger.info(f"✅ StringSession создан (длина: {len(session_string)} символов)")
 
         return jsonify({
             'success': True,
-            'message': f'✅ Авторизация успешна! Привет, {me.first_name}! Теперь перезапустите приложение в Railway.',
+            'message': f'✅ Авторизация успешна! Привет, {me.first_name}!',
             'user': {
                 'first_name': me.first_name,
                 'username': me.username
-            }
+            },
+            'session_string': session_string  # Отправляем строку сессии
         })
 
     except Exception as e:
