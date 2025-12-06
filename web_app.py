@@ -1,360 +1,223 @@
 """
-Веб-сервер для Telegram Desktop Alerts
-ПРОСТОЕ И НАДЕЖНОЕ СКАНИРОВАНИЕ КАНАЛА
+TELEGRAM ALERTS - МАКСИМАЛЬНО ПРОСТАЯ И НАДЕЖНАЯ ВЕРСИЯ
+Сканирование канала каждые 5 секунд
 """
 import os
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from threading import Thread
-from flask import Flask, render_template, request
+from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from dotenv import load_dotenv
 from telethon import TelegramClient
-from telethon.tl.types import Message
 
-# Загружаем переменные окружения
 load_dotenv()
 
-# Настройка логирования
+# ЛОГИРОВАНИЕ - максимально подробное
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('telegram_monitor.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
-# Создаем Flask приложение
+# Flask приложение
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'telegram-alerts-secret-key')
+app.config['SECRET_KEY'] = 'secret'
 CORS(app)
 
-# Инициализация SocketIO
-socketio = SocketIO(
-    app,
-    cors_allowed_origins="*",
-    async_mode='threading',
-    logger=True,
-    engineio_logger=True,
-    ping_timeout=60,
-    ping_interval=25
-)
+# SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Глобальные переменные
 telegram_client = None
-last_message_id = None  # ID последнего просмотренного сообщения
-confirmed_messages = set()  # ID подтвержденных сообщений
+all_messages = []  # Все сообщения из канала
+last_check_id = None  # ID последнего проверенного сообщения
 
 
-class TelegramScanner:
-    """Класс для СКАНИРОВАНИЯ Telegram канала (не ждем события, а проверяем сами!)"""
+class SimpleScanner:
+    """Простейший сканер канала"""
 
-    def __init__(self, socketio_instance):
-        self.socketio = socketio_instance
+    def __init__(self):
+        logger.info("=" * 80)
+        logger.info("ИНИЦИАЛИЗАЦИЯ СКАНЕРА")
+        logger.info("=" * 80)
+
         self.api_id = os.getenv('API_ID')
         self.api_hash = os.getenv('API_HASH')
-        self.channel_id = os.getenv('CHANNEL_ID')
-        self.scan_interval = 3  # Сканируем каждые 3 секунды
+        self.channel_id = os.getenv('CHANNEL_ID', '@utraci')
 
-        if not self.api_id or not self.api_hash or not self.channel_id:
-            raise ValueError("Необходимо заполнить API_ID, API_HASH и CHANNEL_ID в файле .env")
+        logger.info(f"API_ID: {self.api_id}")
+        logger.info(f"API_HASH: {self.api_hash[:10]}..." if self.api_hash else "API_HASH: НЕ УСТАНОВЛЕН")
+        logger.info(f"CHANNEL_ID: {self.channel_id}")
 
-        if self.channel_id.startswith('@'):
-            self.channel_entity = self.channel_id
-        else:
-            try:
-                self.channel_entity = int(self.channel_id)
-            except ValueError:
-                raise ValueError(f"CHANNEL_ID должен быть числом или начинаться с @")
+        if not self.api_id or not self.api_hash:
+            raise ValueError("НЕ УКАЗАНЫ API_ID или API_HASH!")
 
         self.client = TelegramClient('telegram_session', int(self.api_id), self.api_hash)
-        self.running = True
+        logger.info("✅ TelegramClient создан")
 
-        logger.info(f"TelegramScanner инициализирован")
-        logger.info(f"Канал: {self.channel_entity}, Интервал сканирования: {self.scan_interval} сек")
+    async def scan_forever(self):
+        """Бесконечное сканирование"""
+        global telegram_client, all_messages, last_check_id
 
-    async def get_recent_messages(self, limit=20):
-        """Получить последние сообщения из канала"""
         try:
-            messages = []
-            async for message in self.client.iter_messages(self.channel_entity, limit=limit):
-                if message.text:  # Только текстовые сообщения
-                    messages.append({
-                        'id': message.id,
-                        'text': message.text,
-                        'date': message.date.strftime('%d.%m.%Y'),
-                        'time': message.date.strftime('%H:%M:%S')
-                    })
-            return messages
+            logger.info("=" * 80)
+            logger.info("ПОДКЛЮЧЕНИЕ К TELEGRAM")
+            logger.info("=" * 80)
+
+            await self.client.start()
+            telegram_client = self.client
+
+            me = await self.client.get_me()
+            logger.info(f"✅ АВТОРИЗОВАН: {me.first_name} (@{me.username})")
+
+            logger.info(f"Получаю информацию о канале: {self.channel_id}")
+            channel = await self.client.get_entity(self.channel_id)
+            logger.info(f"✅ КАНАЛ НАЙДЕН: {channel.title} (ID: {channel.id})")
+
+            logger.info("=" * 80)
+            logger.info("НАЧИНАЮ СКАНИРОВАНИЕ КАЖДЫЕ 5 СЕКУНД")
+            logger.info("=" * 80)
+
+            scan_count = 0
+
+            while True:
+                scan_count += 1
+                logger.info(f"\n{'='*80}")
+                logger.info(f"СКАНИРОВАНИЕ #{scan_count} - {datetime.now().strftime('%H:%M:%S')}")
+                logger.info(f"{'='*80}")
+
+                try:
+                    # Получаем последние 10 сообщений
+                    logger.info("Получаю последние 10 сообщений из канала...")
+                    messages = []
+
+                    async for message in self.client.iter_messages(self.channel_id, limit=10):
+                        if message.text:
+                            msg_data = {
+                                'id': message.id,
+                                'text': message.text,
+                                'date': message.date.strftime('%d.%m.%Y'),
+                                'time': message.date.strftime('%H:%M:%S')
+                            }
+                            messages.append(msg_data)
+                            logger.info(f"  📬 Сообщение #{message.id}: {message.text[:50]}...")
+
+                    logger.info(f"✅ Получено {len(messages)} сообщений")
+
+                    # Обновляем глобальный список
+                    all_messages = messages
+
+                    # Отправляем всем клиентам
+                    logger.info("Отправляю обновление всем подключенным клиентам...")
+                    socketio.emit('messages_update', {'messages': messages})
+
+                    # Проверяем на новые
+                    if messages:
+                        newest_id = messages[0]['id']
+
+                        if last_check_id is None:
+                            logger.info(f"📌 ПЕРВАЯ ПРОВЕРКА: запоминаю ID {newest_id}")
+                            last_check_id = newest_id
+                        elif newest_id > last_check_id:
+                            new_count = 0
+                            for msg in messages:
+                                if msg['id'] > last_check_id:
+                                    new_count += 1
+
+                            logger.info("!" * 80)
+                            logger.info(f"🔔 ОБНАРУЖЕНО {new_count} НОВЫХ СООБЩЕНИЙ!")
+                            logger.info("!" * 80)
+
+                            # Отправляем алерт
+                            for msg in messages:
+                                if msg['id'] > last_check_id:
+                                    logger.info(f"📢 НОВОЕ СООБЩЕНИЕ #{msg['id']}: {msg['text'][:100]}")
+                                    socketio.emit('new_alert', {'message': msg})
+
+                            last_check_id = newest_id
+                        else:
+                            logger.info(f"ℹ️  Новых сообщений нет (последний ID: {newest_id})")
+
+                except Exception as e:
+                    logger.error(f"❌ ОШИБКА ПРИ СКАНИРОВАНИИ: {e}", exc_info=True)
+
+                logger.info(f"⏳ Жду 5 секунд до следующего сканирования...")
+                await asyncio.sleep(5)
+
         except Exception as e:
-            logger.error(f"Ошибка получения сообщений: {e}")
-            return []
-
-    async def scan_loop(self):
-        """Бесконечный цикл сканирования канала"""
-        global last_message_id
-
-        logger.info("=" * 80)
-        logger.info("🚀 ЗАПУСК СКАНЕРА КАНАЛА")
-        logger.info("=" * 80)
-
-        await self.client.start()
-        me = await self.client.get_me()
-        logger.info(f"✅ Авторизован: {me.first_name} (@{me.username})")
-
-        channel = await self.client.get_entity(self.channel_entity)
-        logger.info(f"✅ Подключен к каналу: {channel.title} (ID: {channel.id})")
-
-        # Подписываемся на канал если ещё не подписаны
-        try:
-            from telethon.tl.functions.channels import JoinChannelRequest
-            await self.client(JoinChannelRequest(channel))
-            logger.info("✅ Подписан на канал")
-        except Exception as e:
-            logger.info(f"Подписка: {e}")
-
-        logger.info("=" * 80)
-        logger.info("🔍 НАЧИНАЮ СКАНИРОВАНИЕ КАНАЛА КАЖДЫЕ 3 СЕКУНДЫ")
-        logger.info("=" * 80)
-
-        while self.running:
-            try:
-                # Получаем последние сообщения
-                messages = await self.get_recent_messages(limit=20)
-
-                if messages:
-                    # Отправляем все сообщения клиентам
-                    self.socketio.emit('messages_update', {
-                        'messages': messages,
-                        'channel_name': channel.title
-                    }, namespace='/')
-
-                    # Проверяем есть ли НОВЫЕ сообщения
-                    newest_message_id = messages[0]['id']
-
-                    if last_message_id is None:
-                        # Первый запуск - запоминаем последнее сообщение
-                        last_message_id = newest_message_id
-                        logger.info(f"📌 Инициализация: последнее сообщение ID {last_message_id}")
-                    elif newest_message_id > last_message_id:
-                        # Есть НОВЫЕ сообщения!
-                        new_messages = [m for m in messages if m['id'] > last_message_id]
-
-                        logger.info("=" * 80)
-                        logger.info(f"🔔 ОБНАРУЖЕНО {len(new_messages)} НОВЫХ СООБЩЕНИЙ!")
-                        logger.info("=" * 80)
-
-                        for msg in reversed(new_messages):  # От старых к новым
-                            if msg['id'] not in confirmed_messages:
-                                logger.info(f"📢 НОВОЕ: ID {msg['id']}")
-                                logger.info(f"💬 Текст: {msg['text'][:100]}...")
-                                logger.info(f"⏰ Время: {msg['time']}")
-
-                                # Отправляем уведомление о НОВОМ сообщении
-                                self.socketio.emit('new_message_alert', {
-                                    'message': msg,
-                                    'channel_name': channel.title
-                                }, namespace='/')
-
-                        last_message_id = newest_message_id
-
-                # Ждем перед следующим сканированием
-                await asyncio.sleep(self.scan_interval)
-
-            except Exception as e:
-                logger.error(f"❌ Ошибка сканирования: {e}", exc_info=True)
-                await asyncio.sleep(self.scan_interval)
-
-    async def start(self):
-        """Запуск сканера"""
-        try:
-            await self.scan_loop()
-        except Exception as e:
-            logger.error(f"Критическая ошибка сканера: {e}", exc_info=True)
+            logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА: {e}", exc_info=True)
             raise
 
 
-def run_telegram_scanner():
-    """Запуск сканера в отдельном потоке"""
-    global telegram_client
+def run_scanner():
+    """Запуск сканера в потоке"""
+    logger.info("🚀 ЗАПУСК ПОТОКА СКАНЕРА")
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-        scanner = TelegramScanner(socketio)
-        telegram_client = scanner.client
-        loop.run_until_complete(scanner.start())
+        scanner = SimpleScanner()
+        loop.run_until_complete(scanner.scan_forever())
     except Exception as e:
-        logger.error(f"Ошибка: {e}", exc_info=True)
+        logger.error(f"❌ Ошибка в потоке сканера: {e}", exc_info=True)
 
 
 @app.route('/')
 def index():
-    """Главная страница"""
-    return render_template('messages.html')
+    logger.info("📄 Запрос главной страницы")
+    return render_template('simple.html')
 
 
 @app.route('/api/status')
 def status():
-    """Статус сервера"""
+    is_connected = telegram_client and telegram_client.is_connected()
+    logger.info(f"📊 Запрос статуса: connected={is_connected}, messages={len(all_messages)}")
     return {
-        'status': 'running',
-        'telegram_connected': telegram_client is not None and telegram_client.is_connected(),
-        'last_message_id': last_message_id,
-        'confirmed_count': len(confirmed_messages)
+        'connected': is_connected,
+        'messages_count': len(all_messages),
+        'last_id': last_check_id
     }
-
-
-@app.route('/status')
-def status_page():
-    """Страница проверки статуса"""
-    is_connected = telegram_client is not None and telegram_client.is_connected()
-
-    status_html = f"""
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <title>Статус сканера</title>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                margin: 0;
-                padding: 20px;
-            }}
-            .container {{
-                background: white;
-                padding: 40px;
-                border-radius: 20px;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-                max-width: 600px;
-                width: 100%;
-            }}
-            h1 {{
-                color: #333;
-                margin-bottom: 20px;
-            }}
-            .status {{
-                padding: 20px;
-                border-radius: 10px;
-                margin: 20px 0;
-                font-size: 18px;
-                font-weight: bold;
-            }}
-            .connected {{
-                background: #d1fae5;
-                color: #065f46;
-            }}
-            .disconnected {{
-                background: #fee2e2;
-                color: #991b1b;
-            }}
-            .info {{
-                background: #f3f4f6;
-                padding: 15px;
-                border-radius: 8px;
-                margin: 15px 0;
-                line-height: 1.6;
-            }}
-            a {{
-                color: #667eea;
-                text-decoration: none;
-                font-weight: bold;
-            }}
-            .button {{
-                display: inline-block;
-                padding: 12px 24px;
-                background: #667eea;
-                color: white;
-                text-decoration: none;
-                border-radius: 8px;
-                margin: 10px 5px;
-            }}
-        </style>
-        <script>
-            setTimeout(() => location.reload(), 5000);
-        </script>
-    </head>
-    <body>
-        <div class="container">
-            <h1>🔍 Статус сканера</h1>
-
-            <div class="status {'connected' if is_connected else 'disconnected'}">
-                {'✅ Telegram подключен - СКАНИРУЮ КАНАЛ' if is_connected else '❌ Telegram НЕ подключен'}
-            </div>
-
-            <div class="info">
-                <strong>Канал:</strong><br>
-                {os.getenv('CHANNEL_ID', 'не указан')}
-            </div>
-
-            <div class="info">
-                <strong>Режим работы:</strong><br>
-                Сканирование каждые 3 секунды
-            </div>
-
-            {'<div class="info"><strong>✅ Работает!</strong><br>Сканер проверяет канал каждые 3 секунды и сразу покажет новые сообщения!</div>' if is_connected else '<div class="info" style="background: #fee2e2; color: #991b1b;"><strong>⚠️ Не подключен!</strong><br>Проверьте логи</div>'}
-
-            <div style="margin-top: 30px; text-align: center;">
-                <a href="/" class="button">Главная</a>
-            </div>
-
-            <div class="info" style="margin-top: 20px; font-size: 14px; color: #666;">
-                Обновление каждые 5 секунд
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-    return status_html
 
 
 @socketio.on('connect')
 def handle_connect():
-    """Подключение клиента"""
-    logger.info(f"✅ Клиент подключен: {request.sid}")
+    logger.info(f"✅ Клиент подключен")
     emit('connected', {'status': 'ok'})
+
+    # Отправляем текущие сообщения
+    if all_messages:
+        logger.info(f"Отправляю {len(all_messages)} сообщений новому клиенту")
+        emit('messages_update', {'messages': all_messages})
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    """Отключение клиента"""
-    logger.info(f"❌ Клиент отключен: {request.sid}")
+    logger.info(f"❌ Клиент отключен")
 
 
-@socketio.on('confirm_message')
+@socketio.on('confirm')
 def handle_confirm(data):
-    """Подтверждение просмотра сообщения"""
-    global confirmed_messages
-    message_id = data.get('message_id')
-    user_name = data.get('user_name')
-
-    confirmed_messages.add(message_id)
-    logger.info(f"✅ Сообщение {message_id} подтверждено пользователем: {user_name}")
-    logger.info(f"📊 Всего подтверждено: {len(confirmed_messages)}")
-
-    emit('confirmation_received', {'message_id': message_id})
+    msg_id = data.get('message_id')
+    name = data.get('name')
+    logger.info(f"✅ Подтверждение сообщения #{msg_id} от {name}")
 
 
 if __name__ == '__main__':
-    # Запуск Telegram сканера
-    scanner_thread = Thread(target=run_telegram_scanner, daemon=True)
+    logger.info("=" * 80)
+    logger.info("ЗАПУСК СЕРВЕРА")
+    logger.info("=" * 80)
+
+    # Запускаем сканер
+    scanner_thread = Thread(target=run_scanner, daemon=True)
     scanner_thread.start()
+    logger.info("✅ Поток сканера запущен")
 
     port = int(os.getenv('PORT', '5000'))
-    host = os.getenv('HOST', '0.0.0.0')
-
-    logger.info("=" * 80)
-    logger.info(f"🚀 Сервер запущен: http://localhost:{port}")
-    logger.info(f"📱 Откройте эту ссылку в браузере!")
+    logger.info(f"🌐 Запуск веб-сервера на порту {port}")
     logger.info("=" * 80)
 
-    socketio.run(app, host=host, port=port, debug=False, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
