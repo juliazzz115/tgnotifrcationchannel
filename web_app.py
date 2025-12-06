@@ -200,10 +200,18 @@ def send_code():
         return jsonify({'error': 'Укажите номер телефона'}), 400
 
     try:
+        # Создаем клиент синхронно
         temp_client = TelegramClient('telegram_session_NEW', int(API_ID), API_HASH)
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # Важно: создаем новый event loop для этого потока
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
         async def send():
             await temp_client.connect()
@@ -218,6 +226,7 @@ def send_code():
         })
 
     except Exception as e:
+        logger.error(f"Ошибка send_code: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -233,8 +242,15 @@ def verify_code():
         return jsonify({'error': 'Сначала отправьте код на телефон'}), 400
 
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # Получаем или создаем event loop
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
 
         async def sign_in():
             try:
@@ -270,6 +286,7 @@ def verify_code():
         })
 
     except Exception as e:
+        logger.error(f"Ошибка verify_code: {e}", exc_info=True)
         return jsonify({'error': f'Ошибка: {str(e)}'}), 500
 
 
