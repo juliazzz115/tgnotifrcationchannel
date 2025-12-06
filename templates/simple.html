@@ -236,6 +236,7 @@
         let confirmedIds = new Set();
         let alertSound = null;
         let soundInterval = null;
+        let allMessages = []; // Храним все незакрытые сообщения
 
         // Звук
         try {
@@ -273,7 +274,21 @@
                 return true;
             });
 
-            renderMessages(filteredMessages);
+            // Обновляем массив всех сообщений (объединяем с уже показанными через new_alert)
+            filteredMessages.forEach(msg => {
+                const exists = allMessages.find(m => m.id === msg.id);
+                if (!exists) {
+                    allMessages.push(msg);
+                }
+            });
+
+            // Удаляем из массива те, которых нет в filteredMessages (устаревшие)
+            allMessages = allMessages.filter(msg => {
+                return filteredMessages.find(m => m.id === msg.id) ||
+                       (new Date(msg.date.split('.').reverse().join('-') + ' ' + msg.time).getTime() >= oneHourAgo);
+            });
+
+            renderMessages(allMessages);
         });
 
         socket.on('new_alert', (data) => {
@@ -282,6 +297,13 @@
             currentMessageData = data.message; // Сохраняем данные
 
             if (!confirmedIds.has(currentMessageId)) {
+                // Добавляем сообщение в список, если его там ещё нет
+                const existingIndex = allMessages.findIndex(m => m.id === data.message.id);
+                if (existingIndex === -1) {
+                    allMessages.unshift(data.message); // Добавляем в начало
+                    renderMessages(allMessages); // Перерисовываем список
+                }
+
                 playSound();
                 showModal(data.message); // Передаем сообщение
                 enterFullscreen();
@@ -367,22 +389,18 @@
             const now = new Date();
             const oneHourAgo = now.getTime() - (60 * 60 * 1000);
 
-            document.querySelectorAll('.message').forEach(card => {
-                const msgId = card.id.replace('msg-', '');
-                const timeText = card.querySelector('.message-time').textContent;
-                const dateText = timeText.split('|')[1]?.trim();
-                const time = timeText.split('|')[0]?.trim();
-
-                if (dateText && time) {
-                    const msgDate = new Date(dateText.split('.').reverse().join('-') + ' ' + time);
-                    if (msgDate.getTime() < oneHourAgo) {
-                        console.log(`Автоудаление старого сообщения #${msgId}`);
-                        card.style.transition = 'opacity 0.5s';
-                        card.style.opacity = '0';
-                        setTimeout(() => card.remove(), 500);
-                    }
-                }
+            // Удаляем старые сообщения из массива
+            const oldLength = allMessages.length;
+            allMessages = allMessages.filter(msg => {
+                const msgDate = new Date(msg.date.split('.').reverse().join('-') + ' ' + msg.time);
+                return msgDate.getTime() >= oneHourAgo;
             });
+
+            // Если были удалены - перерисовываем список
+            if (oldLength !== allMessages.length) {
+                console.log(`Автоудаление: удалено ${oldLength - allMessages.length} сообщений`);
+                renderMessages(allMessages);
+            }
         }, 60000); // Проверяем каждую минуту
 
         function showModal(message) {
@@ -421,6 +439,9 @@
             });
 
             confirmedIds.add(currentMessageId);
+
+            // Удаляем из массива сообщений
+            allMessages = allMessages.filter(m => m.id !== currentMessageId);
 
             // УДАЛЯЕМ карточку из DOM (исчезает)
             const card = document.getElementById(`msg-${currentMessageId}`);
