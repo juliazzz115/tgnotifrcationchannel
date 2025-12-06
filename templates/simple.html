@@ -211,7 +211,10 @@
     <div class="modal" id="modal">
         <div class="modal-content">
             <h2>🔔 НОВОЕ СООБЩЕНИЕ!</h2>
-            <p style="font-size: 24px; margin-bottom: 30px;">Введите ваше имя:</p>
+            <div id="modalMessageText" style="background: #f3f4f6; padding: 20px; border-radius: 10px; margin: 20px 0; max-height: 300px; overflow-y: auto; text-align: left; white-space: pre-wrap; font-size: 18px; line-height: 1.6; color: #333;">
+                Текст сообщения загружается...
+            </div>
+            <p style="font-size: 24px; margin-bottom: 20px;">Введите ваше имя:</p>
             <input type="text" id="nameInput" placeholder="Ваше имя..." autofocus>
             <div class="modal-buttons">
                 <button class="btn-ok" onclick="confirmMessage()">✅ ОК</button>
@@ -229,6 +232,7 @@
         });
 
         let currentMessageId = null;
+        let currentMessageData = null; // Сохраняем данные сообщения
         let confirmedIds = new Set();
         let alertSound = null;
         let soundInterval = null;
@@ -275,10 +279,11 @@
         socket.on('new_alert', (data) => {
             console.log('🔔 НОВОЕ СООБЩЕНИЕ!', data);
             currentMessageId = data.message.id;
+            currentMessageData = data.message; // Сохраняем данные
 
             if (!confirmedIds.has(currentMessageId)) {
                 playSound();
-                showModal();
+                showModal(data.message); // Передаем сообщение
                 enterFullscreen();
 
                 // Показываем push-уведомление
@@ -343,7 +348,17 @@
 
         function confirmFromCard(id) {
             currentMessageId = id;
-            showModal();
+
+            // Находим данные сообщения в DOM
+            const card = document.getElementById(`msg-${id}`);
+            if (card) {
+                const messageText = card.querySelector('.message-text').textContent;
+                currentMessageData = { id: id, text: messageText };
+                showModal(currentMessageData);
+            } else {
+                showModal();
+            }
+
             playSound();
         }
 
@@ -370,10 +385,18 @@
             });
         }, 60000); // Проверяем каждую минуту
 
-        function showModal() {
+        function showModal(message) {
             document.getElementById('modal').classList.add('show');
             document.getElementById('nameInput').value = '';
             document.getElementById('nameInput').focus();
+
+            // Отображаем текст сообщения
+            const messageTextDiv = document.getElementById('modalMessageText');
+            if (message && message.text) {
+                messageTextDiv.textContent = message.text;
+            } else {
+                messageTextDiv.textContent = 'Текст сообщения недоступен';
+            }
         }
 
         function closeModal() {
