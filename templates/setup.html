@@ -174,15 +174,15 @@
                 <h2 style="margin-bottom: 20px;">✅ Готово!</h2>
                 <p style="font-size: 18px; margin-bottom: 20px;">Сессия успешно создана!</p>
                 <p style="font-size: 16px; font-weight: normal; margin-bottom: 20px;">
-                    Теперь нажмите кнопку ниже чтобы автоматически загрузить сессию в GitHub и перезапустить приложение:
+                    Нажмите кнопку ниже чтобы скачать session файл. Затем отправьте его ассистенту в чат, и он загрузит его в GitHub.
                 </p>
             </div>
 
-            <div id="uploadResult" style="display: none; margin-bottom: 20px;"></div>
-
-            <button onclick="uploadSession()" id="uploadBtn" style="background: #667eea;">
-                🚀 Загрузить и перезапустить
-            </button>
+            <a href="/api/download_session" download style="display: inline-block; width: 100%; text-decoration: none;">
+                <button style="background: #10b981; width: 100%;">
+                    📥 Скачать session файл
+                </button>
+            </a>
         </div>
     </div>
 
@@ -290,49 +290,6 @@
         document.getElementById('codeInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') verifyCode();
         });
-
-        async function uploadSession() {
-            const resultDiv = document.getElementById('uploadResult');
-            const btn = document.getElementById('uploadBtn');
-
-            resultDiv.style.display = 'none';
-            btn.disabled = true;
-            btn.textContent = 'Загружаю...';
-
-            try {
-                const response = await fetch('/api/upload_session', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    resultDiv.className = 'success';
-                    resultDiv.textContent = data.message + ' Подождите 1-2 минуты, затем обновите страницу.';
-                    resultDiv.style.display = 'block';
-
-                    // Через 3 секунды перезагружаем страницу
-                    setTimeout(() => {
-                        window.location.href = '/';
-                    }, 3000);
-                } else {
-                    resultDiv.className = 'error';
-                    resultDiv.textContent = data.error || 'Ошибка загрузки';
-                    resultDiv.style.display = 'block';
-                    btn.disabled = false;
-                    btn.textContent = '🚀 Загрузить и перезапустить';
-                }
-            } catch (e) {
-                resultDiv.className = 'error';
-                resultDiv.textContent = 'Ошибка соединения: ' + e.message;
-                resultDiv.style.display = 'block';
-                btn.disabled = false;
-                btn.textContent = '🚀 Загрузить и перезапустить';
-            }
-        }
     </script>
 </body>
 </html>

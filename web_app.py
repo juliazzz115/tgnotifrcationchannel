@@ -287,45 +287,23 @@ def verify_code():
         return jsonify({'error': f'Ошибка: {str(e)}'}), 500
 
 
-@app.route('/api/upload_session', methods=['POST'])
-def upload_session():
-    """Загрузить session файл в GitHub и перезапустить"""
+@app.route('/api/download_session')
+def download_session():
+    """Скачать session файл"""
     try:
-        import subprocess
+        from flask import send_file
 
-        # Проверяем что session файл существует
         if not os.path.exists('telegram_session.session'):
             return jsonify({'error': 'Session файл не найден'}), 404
 
-        logger.info("Начинаю загрузку session в GitHub...")
-
-        # Git add
-        result = subprocess.run(['git', 'add', 'telegram_session.session'],
-                              capture_output=True, text=True, timeout=10)
-        logger.info(f"git add: {result.stdout} {result.stderr}")
-
-        # Git commit
-        result = subprocess.run(['git', 'commit', '-m', 'Добавлена новая Telegram сессия'],
-                              capture_output=True, text=True, timeout=10)
-        logger.info(f"git commit: {result.stdout} {result.stderr}")
-
-        # Git push
-        result = subprocess.run(['git', 'push'],
-                              capture_output=True, text=True, timeout=30)
-        logger.info(f"git push: {result.stdout} {result.stderr}")
-
-        if result.returncode == 0:
-            return jsonify({
-                'success': True,
-                'message': '✅ Session загружен в GitHub! Сейчас Railway автоматически перезапустится.'
-            })
-        else:
-            return jsonify({
-                'error': f'Ошибка git push: {result.stderr}'
-            }), 500
+        logger.info("Отправка session файла для скачивания...")
+        return send_file('telegram_session.session',
+                        as_attachment=True,
+                        download_name='telegram_session.session',
+                        mimetype='application/octet-stream')
 
     except Exception as e:
-        logger.error(f"Ошибка upload_session: {e}", exc_info=True)
+        logger.error(f"Ошибка download_session: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
