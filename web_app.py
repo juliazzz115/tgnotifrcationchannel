@@ -200,10 +200,7 @@ def send_code():
         return jsonify({'error': 'Укажите номер телефона'}), 400
 
     try:
-        # Создаем клиент синхронно
-        temp_client = TelegramClient('telegram_session_NEW', int(API_ID), API_HASH)
-
-        # Важно: создаем новый event loop для этого потока
+        # ВАЖНО: создаем event loop ПЕРЕД созданием TelegramClient!
         try:
             loop = asyncio.get_event_loop()
             if loop.is_closed():
@@ -212,6 +209,9 @@ def send_code():
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+
+        # Теперь создаем клиент - у потока уже есть event loop
+        temp_client = TelegramClient('telegram_session_NEW', int(API_ID), API_HASH)
 
         async def send():
             await temp_client.connect()
