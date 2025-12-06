@@ -254,7 +254,22 @@
 
         socket.on('messages_update', (data) => {
             console.log('📥 Получены сообщения:', data);
-            renderMessages(data.messages);
+            // Фильтруем сообщения - только неподтвержденные и не старше 1 часа
+            const now = new Date();
+            const oneHourAgo = now.getTime() - (60 * 60 * 1000);
+
+            const filteredMessages = data.messages.filter(msg => {
+                // Пропускаем подтвержденные
+                if (confirmedIds.has(msg.id)) return false;
+
+                // Пропускаем старше часа
+                const msgDate = new Date(msg.date.split('.').reverse().join('-') + ' ' + msg.time);
+                if (msgDate.getTime() < oneHourAgo) return false;
+
+                return true;
+            });
+
+            renderMessages(filteredMessages);
         });
 
         socket.on('new_alert', (data) => {
@@ -265,8 +280,38 @@
                 playSound();
                 showModal();
                 enterFullscreen();
+
+                // Показываем push-уведомление
+                showPushNotification(data.message);
             }
         });
+
+        // Запрашиваем разрешение на push-уведомления при загрузке
+        if ('Notification' in window) {
+            if (Notification.permission === 'default') {
+                Notification.requestPermission().then(permission => {
+                    console.log('Push notifications:', permission);
+                });
+            }
+        }
+
+        function showPushNotification(message) {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const notification = new Notification('🔔 Новое сообщение в Telegram', {
+                    body: message.text.substring(0, 100) + '...',
+                    icon: '/static/icon.png',
+                    badge: '/static/badge.png',
+                    tag: 'telegram-alert-' + message.id,
+                    requireInteraction: true,
+                    vibrate: [500, 250, 500]
+                });
+
+                notification.onclick = () => {
+                    window.focus();
+                    notification.close();
+                };
+            }
+        }
 
         function renderMessages(messages) {
             const container = document.getElementById('messages');
@@ -302,6 +347,29 @@
             playSound();
         }
 
+        // Автоматически удаляем сообщения старше 1 часа каждую минуту
+        setInterval(() => {
+            const now = new Date();
+            const oneHourAgo = now.getTime() - (60 * 60 * 1000);
+
+            document.querySelectorAll('.message').forEach(card => {
+                const msgId = card.id.replace('msg-', '');
+                const timeText = card.querySelector('.message-time').textContent;
+                const dateText = timeText.split('|')[1]?.trim();
+                const time = timeText.split('|')[0]?.trim();
+
+                if (dateText && time) {
+                    const msgDate = new Date(dateText.split('.').reverse().join('-') + ' ' + time);
+                    if (msgDate.getTime() < oneHourAgo) {
+                        console.log(`Автоудаление старого сообщения #${msgId}`);
+                        card.style.transition = 'opacity 0.5s';
+                        card.style.opacity = '0';
+                        setTimeout(() => card.remove(), 500);
+                    }
+                }
+            });
+        }, 60000); // Проверяем каждую минуту
+
         function showModal() {
             document.getElementById('modal').classList.add('show');
             document.getElementById('nameInput').value = '';
@@ -328,11 +396,22 @@
 
             confirmedIds.add(currentMessageId);
 
+            // УДАЛЯЕМ карточку из DOM (исчезает)
             const card = document.getElementById(`msg-${currentMessageId}`);
             if (card) {
-                card.classList.remove('new');
-                card.classList.add('confirmed');
-                card.querySelector('.confirm-btn')?.remove();
+                card.style.transition = 'opacity 0.5s, transform 0.5s';
+                card.style.opacity = '0';
+                card.style.transform = 'scale(0.8)';
+
+                setTimeout(() => {
+                    card.remove();
+
+                    // Если больше нет сообщений - показываем "нет сообщений"
+                    const container = document.getElementById('messages');
+                    if (container.children.length === 0) {
+                        container.innerHTML = '<div class="no-messages">Нет новых сообщений</div>';
+                    }
+                }, 500);
             }
 
             closeModal();
