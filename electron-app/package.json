@@ -21,10 +21,14 @@
     "productName": "Telegram Alerts",
     "mac": {
       "category": "public.app-category.utilities",
-      "target": ["dmg"]
+      "target": ["dmg"],
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "dmg": {
-      "title": "Telegram Alerts"
+      "title": "Telegram Alerts",
+      "sign": false
     },
     "files": [
       "main.js",
