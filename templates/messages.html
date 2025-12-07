@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Alerts</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            text-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            margin-bottom: 10px;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            font-size: 18px;
+        }
+
+        .status.connected {
+            background: #10b981;
+        }
+
+        .status.disconnected {
+            background: #ef4444;
+        }
+
+        .messages-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .message-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .message-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+
+        .message-card.new {
+            background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
+            color: white;
+            animation: pulse 2s infinite, glow 1.5s ease-in-out infinite;
+            border: 5px solid #ffff00;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        @keyframes glow {
+            0%, 100% {
+                box-shadow: 0 0 20px rgba(255,0,0,0.5),
+                           0 0 40px rgba(255,0,0,0.3),
+                           0 0 60px rgba(255,0,0,0.1);
+            }
+            50% {
+                box-shadow: 0 0 30px rgba(255,0,0,0.8),
+                           0 0 60px rgba(255,0,0,0.5),
+                           0 0 90px rgba(255,0,0,0.3);
+            }
+        }
+
+        .message-card.confirmed {
+            opacity: 0.6;
+            background: #f3f4f6;
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(0,0,0,0.1);
+        }
+
+        .message-card.new .message-header {
+            border-bottom-color: rgba(255,255,255,0.3);
+        }
+
+        .message-id {
+            font-weight: bold;
+            font-size: 24px;
+        }
+
+        .message-time {
+            font-size: 16px;
+            opacity: 0.8;
+        }
+
+        .message-text {
+            font-size: 20px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            margin-bottom: 20px;
+        }
+
+        .new-badge {
+            display: inline-block;
+            background: #ffff00;
+            color: #cc0000;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 18px;
+            animation: shake 0.5s infinite;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: rotate(-3deg); }
+            50% { transform: rotate(3deg); }
+        }
+
+        .confirm-button {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .confirm-button:hover {
+            background: #059669;
+            transform: scale(1.05);
+        }
+
+        .confirm-button:active {
+            transform: scale(0.95);
+        }
+
+        .no-messages {
+            text-align: center;
+            color: white;
+            font-size: 24px;
+            margin-top: 100px;
+            opacity: 0.7;
+        }
+
+        /* Модальное окно подтверждения */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            max-width: 600px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+
+        .modal h2 {
+            color: #dc2626;
+            margin-bottom: 20px;
+            font-size: 32px;
+        }
+
+        .modal input {
+            width: 100%;
+            padding: 15px;
+            font-size: 18px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .modal input:focus {
+            outline: none;
+            border-color: #dc2626;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+        }
+
+        .modal-buttons button {
+            flex: 1;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-confirm {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-confirm:hover {
+            background: #059669;
+        }
+
+        .btn-cancel {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-cancel:hover {
+            background: #4b5563;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📱 Telegram Alerts</h1>
+        <div class="status disconnected" id="status">🔴 Подключение...</div>
+    </div>
+
+    <div class="messages-container" id="messagesContainer">
+        <div class="no-messages">Загрузка сообщений...</div>
+    </div>
+
+    <!-- Модальное окно подтверждения -->
+    <div class="modal" id="confirmModal">
+        <div class="modal-content">
+            <h2>🔔 НОВОЕ СООБЩЕНИЕ!</h2>
+            <p style="margin-bottom: 20px; font-size: 18px; color: #666;">
+                Введите ваше имя чтобы подтвердить просмотр:
+            </p>
+            <input type="text" id="nameInput" placeholder="Введите ваше имя..." autofocus>
+            <div class="modal-buttons">
+                <button class="btn-confirm" onclick="confirmMessage()">✅ Подтвердить</button>
+                <button class="btn-cancel" onclick="closeModal()">❌ Позже</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // WebSocket подключение
+        const socket = io({
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionAttempts: 10
+        });
+
+        let currentMessageId = null;
+        let alertSound = null;
+        let soundInterval = null;
+        const confirmedMessages = new Set();
+
+        // Инициализация звука
+        try {
+            alertSound = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.log('Web Audio API не поддерживается');
+        }
+
+        socket.on('connect', () => {
+            console.log('✅ Подключено к серверу');
+            document.getElementById('status').className = 'status connected';
+            document.getElementById('status').innerHTML = '✅ Подключено';
+        });
+
+        socket.on('disconnect', () => {
+            console.log('❌ Отключено от сервера');
+            document.getElementById('status').className = 'status disconnected';
+            document.getElementById('status').innerHTML = '🔴 Отключено';
+        });
+
+        // Обновление ленты сообщений
+        socket.on('messages_update', (data) => {
+            console.log('📥 Получены сообщения:', data.messages.length);
+            renderMessages(data.messages, data.channel_name);
+        });
+
+        // НОВОЕ СООБЩЕНИЕ - показываем модальное окно
+        socket.on('new_message_alert', (data) => {
+            console.log('🔔 НОВОЕ СООБЩЕНИЕ:', data);
+
+            currentMessageId = data.message.id;
+
+            // Проверяем не подтверждено ли уже
+            if (confirmedMessages.has(currentMessageId)) {
+                console.log('Сообщение уже подтверждено');
+                return;
+            }
+
+            // Играем звук
+            playAlertSound();
+
+            // Показываем модальное окно
+            showModal();
+
+            // Пытаемся развернуть на весь экран
+            enterFullscreen();
+        });
+
+        function renderMessages(messages, channelName) {
+            const container = document.getElementById('messagesContainer');
+
+            if (messages.length === 0) {
+                container.innerHTML = '<div class="no-messages">Нет сообщений</div>';
+                return;
+            }
+
+            let html = '';
+
+            messages.forEach(msg => {
+                const isConfirmed = confirmedMessages.has(msg.id);
+                const isNew = !isConfirmed;
+
+                html += `
+                    <div class="message-card ${isNew ? 'new' : 'confirmed'}" id="msg-${msg.id}">
+                        <div class="message-header">
+                            <div>
+                                <div class="message-id">
+                                    📬 Сообщение #${msg.id}
+                                    ${isNew ? '<span class="new-badge">⚠️ НОВОЕ!</span>' : ''}
+                                </div>
+                                <div class="message-time">
+                                    ${msg.time} | ${msg.date}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="message-text">${escapeHtml(msg.text)}</div>
+                        ${isNew ? `<button class="confirm-button" onclick="showModalForMessage(${msg.id})">✅ Подтвердить просмотр</button>` : '<div style="color: #10b981; font-weight: bold;">✅ Подтверждено</div>'}
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function showModalForMessage(messageId) {
+            currentMessageId = messageId;
+            showModal();
+            playAlertSound();
+        }
+
+        function showModal() {
+            document.getElementById('confirmModal').classList.add('active');
+            document.getElementById('nameInput').value = '';
+            document.getElementById('nameInput').focus();
+        }
+
+        function closeModal() {
+            document.getElementById('confirmModal').classList.remove('active');
+            stopAlertSound();
+        }
+
+        function confirmMessage() {
+            const name = document.getElementById('nameInput').value.trim();
+
+            if (!name) {
+                alert('Пожалуйста, введите ваше имя!');
+                return;
+            }
+
+            // Отправляем подтверждение на сервер
+            socket.emit('confirm_message', {
+                message_id: currentMessageId,
+                user_name: name
+            });
+
+            // Добавляем в подтвержденные
+            confirmedMessages.add(currentMessageId);
+
+            // Обновляем карточку
+            const card = document.getElementById(`msg-${currentMessageId}`);
+            if (card) {
+                card.classList.remove('new');
+                card.classList.add('confirmed');
+                card.querySelector('.confirm-button').outerHTML = '<div style="color: #10b981; font-weight: bold;">✅ Подтверждено</div>';
+            }
+
+            closeModal();
+            console.log(`✅ Сообщение ${currentMessageId} подтверждено пользователем ${name}`);
+        }
+
+        function playAlertSound() {
+            if (!alertSound) return;
+
+            if (soundInterval) {
+                clearInterval(soundInterval);
+            }
+
+            function beep(frequency, duration, volume) {
+                const oscillator = alertSound.createOscillator();
+                const gainNode = alertSound.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(alertSound.destination);
+                oscillator.frequency.value = frequency;
+                oscillator.type = 'sine';
+                gainNode.gain.setValueAtTime(volume, alertSound.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, alertSound.currentTime + duration);
+                oscillator.start(alertSound.currentTime);
+                oscillator.stop(alertSound.currentTime + duration);
+            }
+
+            // Играем БЕСКОНЕЧНО пока не подтвердят
+            let count = 0;
+            soundInterval = setInterval(() => {
+                if (count % 2 === 0) {
+                    beep(1200, 0.3, 1.0); // Высокий тон, максимальная громкость
+                } else {
+                    beep(800, 0.3, 1.0);  // Низкий тон
+                }
+                count++;
+            }, 300);
+
+            // Вибрация на телефоне
+            if ('vibrate' in navigator) {
+                const vibratePattern = [500, 500];
+                navigator.vibrate(vibratePattern);
+                const vibrateInterval = setInterval(() => {
+                    navigator.vibrate(vibratePattern);
+                }, 1000);
+                soundInterval.vibrateInterval = vibrateInterval;
+            }
+        }
+
+        function stopAlertSound() {
+            if (soundInterval) {
+                clearInterval(soundInterval);
+                if (soundInterval.vibrateInterval) {
+                    clearInterval(soundInterval.vibrateInterval);
+                }
+                soundInterval = null;
+            }
+            if ('vibrate' in navigator) {
+                navigator.vibrate(0);
+            }
+        }
+
+        function enterFullscreen() {
+            const elem = document.documentElement;
+            try {
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen().catch(err => {
+                        console.log('Fullscreen не удалось:', err);
+                    });
+                } else if (elem.webkitRequestFullscreen) {
+                    elem.webkitRequestFullscreen();
+                } else if (elem.msRequestFullscreen) {
+                    elem.msRequestFullscreen();
+                }
+            } catch (e) {
+                console.log('Ошибка fullscreen:', e);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Enter для подтверждения
+        document.getElementById('nameInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                confirmMessage();
+            }
+        });
+    </script>
+</body>
+</html>

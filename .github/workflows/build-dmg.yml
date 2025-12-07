@@ -1,0 +1,56 @@
+name: Build macOS DMG
+
+on:
+  push:
+    branches:
+      - claude/telegram-desktop-alerts-011EGg3ZAYJcCeuL2bVHbaEe
+      - main
+  workflow_dispatch:  # Позволяет запустить вручную через GitHub UI
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd electron-app
+          npm install
+
+      - name: Build DMG
+        run: |
+          cd electron-app
+          npm run build:dmg
+
+      - name: Upload DMG as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Telegram-Alerts-macOS
+          path: electron-app/dist/*.dmg
+          retention-days: 30
+
+      - name: Get DMG filename
+        id: get_dmg
+        run: |
+          DMG_FILE=$(ls electron-app/dist/*.dmg | head -1)
+          echo "dmg_file=$DMG_FILE" >> $GITHUB_OUTPUT
+          echo "dmg_name=$(basename $DMG_FILE)" >> $GITHUB_OUTPUT
+
+      - name: Display download instructions
+        run: |
+          echo "✅ DMG файл успешно собран!"
+          echo "📦 Файл: ${{ steps.get_dmg.outputs.dmg_name }}"
+          echo ""
+          echo "Как скачать:"
+          echo "1. Перейдите на страницу Actions в GitHub"
+          echo "2. Найдите последний успешный workflow run"
+          echo "3. Скачайте артефакт 'Telegram-Alerts-macOS'"
+          echo "4. Распакуйте ZIP и получите DMG файл!"

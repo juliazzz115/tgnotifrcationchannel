@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Alerts</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .status {
+            text-align: center;
+            color: white;
+            font-size: 24px;
+            margin-bottom: 30px;
+            padding: 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+        }
+
+        .messages {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .message {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            transition: all 0.3s;
+        }
+
+        .message:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+
+        .message.new {
+            background: linear-gradient(135deg, #ff0000, #cc0000);
+            color: white;
+            border: 5px solid yellow;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(0,0,0,0.1);
+        }
+
+        .message.new .message-header {
+            border-bottom-color: rgba(255,255,255,0.3);
+        }
+
+        .message-id {
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .message-time {
+            font-size: 18px;
+            opacity: 0.8;
+        }
+
+        .message-text {
+            font-size: 22px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            margin-bottom: 20px;
+        }
+
+        .confirm-btn {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        .confirm-btn:hover {
+            background: #059669;
+        }
+
+        .confirmed {
+            background: #f3f4f6 !important;
+            opacity: 0.7;
+        }
+
+        .no-messages {
+            text-align: center;
+            color: white;
+            font-size: 32px;
+            margin-top: 100px;
+        }
+
+        /* Модальное окно */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 50px;
+            border-radius: 20px;
+            max-width: 600px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .modal h2 {
+            color: #dc2626;
+            font-size: 42px;
+            margin-bottom: 30px;
+        }
+
+        .modal input {
+            width: 100%;
+            padding: 20px;
+            font-size: 24px;
+            border: 3px solid #ddd;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 20px;
+        }
+
+        .modal-buttons button {
+            flex: 1;
+            padding: 20px;
+            font-size: 22px;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        .btn-ok {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-cancel {
+            background: #6b7280;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 Telegram Alerts</h1>
+        <div class="status" id="status">🔴 Подключение...</div>
+
+        <div class="messages" id="messages">
+            <div class="no-messages">Загрузка сообщений...</div>
+        </div>
+    </div>
+
+    <!-- Модальное окно -->
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <h2>🔔 НОВОЕ СООБЩЕНИЕ!</h2>
+            <div id="modalMessageText" style="background: #f3f4f6; padding: 20px; border-radius: 10px; margin: 20px 0; max-height: 300px; overflow-y: auto; text-align: left; white-space: pre-wrap; font-size: 18px; line-height: 1.6; color: #333;">
+                Текст сообщения загружается...
+            </div>
+            <p style="font-size: 24px; margin-bottom: 20px;">Введите ваше имя:</p>
+            <input type="text" id="nameInput" placeholder="Ваше имя..." autofocus>
+            <div class="modal-buttons">
+                <button class="btn-ok" onclick="confirmMessage()">✅ ОК</button>
+                <button class="btn-cancel" onclick="closeModal()">❌ Позже</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        console.log('🚀 Скрипт запущен');
+
+        const socket = io({
+            transports: ['websocket', 'polling'],
+            reconnection: true
+        });
+
+        let currentMessageId = null;
+        let currentMessageData = null; // Сохраняем данные сообщения
+        let confirmedIds = new Set();
+        let alertSound = null;
+        let soundInterval = null;
+
+        // Звук
+        try {
+            alertSound = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.log('Звук недоступен');
+        }
+
+        socket.on('connect', () => {
+            console.log('✅ Подключено!');
+            document.getElementById('status').innerHTML = '✅ Подключено';
+            document.getElementById('status').style.background = '#10b981';
+        });
+
+        socket.on('disconnect', () => {
+            console.log('❌ Отключено');
+            document.getElementById('status').innerHTML = '🔴 Отключено';
+            document.getElementById('status').style.background = '#ef4444';
+        });
+
+        socket.on('messages_update', (data) => {
+            console.log('📥 Получены сообщения:', data);
+            // Фильтруем сообщения - только неподтвержденные и не старше 1 часа
+            const now = new Date();
+            const oneHourAgo = now.getTime() - (60 * 60 * 1000);
+
+            const filteredMessages = data.messages.filter(msg => {
+                // Пропускаем подтвержденные
+                if (confirmedIds.has(msg.id)) return false;
+
+                // Пропускаем старше часа
+                const msgDate = new Date(msg.date.split('.').reverse().join('-') + ' ' + msg.time);
+                if (msgDate.getTime() < oneHourAgo) return false;
+
+                return true;
+            });
+
+            renderMessages(filteredMessages);
+        });
+
+        socket.on('new_alert', (data) => {
+            console.log('🔔 НОВОЕ СООБЩЕНИЕ!', data);
+            currentMessageId = data.message.id;
+            currentMessageData = data.message; // Сохраняем данные
+
+            if (!confirmedIds.has(currentMessageId)) {
+                playSound();
+                showModal(data.message); // Передаем сообщение
+                enterFullscreen();
+
+                // Показываем push-уведомление
+                showPushNotification(data.message);
+            }
+        });
+
+        // Запрашиваем разрешение на push-уведомления при загрузке
+        if ('Notification' in window) {
+            if (Notification.permission === 'default') {
+                Notification.requestPermission().then(permission => {
+                    console.log('Push notifications:', permission);
+                });
+            }
+        }
+
+        function showPushNotification(message) {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const notification = new Notification('🔔 Новое сообщение в Telegram', {
+                    body: message.text.substring(0, 100) + '...',
+                    icon: '/static/icon.png',
+                    badge: '/static/badge.png',
+                    tag: 'telegram-alert-' + message.id,
+                    requireInteraction: true,
+                    vibrate: [500, 250, 500]
+                });
+
+                notification.onclick = () => {
+                    window.focus();
+                    notification.close();
+                };
+            }
+        }
+
+        function renderMessages(messages) {
+            const container = document.getElementById('messages');
+
+            if (!messages || messages.length === 0) {
+                container.innerHTML = '<div class="no-messages">Нет сообщений</div>';
+                return;
+            }
+
+            let html = '';
+            messages.forEach(msg => {
+                const isConfirmed = confirmedIds.has(msg.id);
+                const cssClass = isConfirmed ? 'message confirmed' : 'message new';
+
+                html += `
+                    <div class="${cssClass}" id="msg-${msg.id}">
+                        <div class="message-header">
+                            <div class="message-id">📬 #${msg.id}</div>
+                            <div class="message-time">${msg.time} | ${msg.date}</div>
+                        </div>
+                        <div class="message-text">${escapeHtml(msg.text)}</div>
+                        ${!isConfirmed ? `<button class="confirm-btn" onclick="confirmFromCard(${msg.id})">✅ Подтвердить</button>` : '<div style="color: #10b981; font-size: 24px; font-weight: bold;">✅ Подтверждено</div>'}
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function confirmFromCard(id) {
+            currentMessageId = id;
+
+            // Находим данные сообщения в DOM
+            const card = document.getElementById(`msg-${id}`);
+            if (card) {
+                const messageText = card.querySelector('.message-text').textContent;
+                currentMessageData = { id: id, text: messageText };
+                showModal(currentMessageData);
+            } else {
+                showModal();
+            }
+
+            playSound();
+        }
+
+        // Автоматически удаляем сообщения старше 1 часа каждую минуту
+        setInterval(() => {
+            const now = new Date();
+            const oneHourAgo = now.getTime() - (60 * 60 * 1000);
+
+            document.querySelectorAll('.message').forEach(card => {
+                const msgId = card.id.replace('msg-', '');
+                const timeText = card.querySelector('.message-time').textContent;
+                const dateText = timeText.split('|')[1]?.trim();
+                const time = timeText.split('|')[0]?.trim();
+
+                if (dateText && time) {
+                    const msgDate = new Date(dateText.split('.').reverse().join('-') + ' ' + time);
+                    if (msgDate.getTime() < oneHourAgo) {
+                        console.log(`Автоудаление старого сообщения #${msgId}`);
+                        card.style.transition = 'opacity 0.5s';
+                        card.style.opacity = '0';
+                        setTimeout(() => card.remove(), 500);
+                    }
+                }
+            });
+        }, 60000); // Проверяем каждую минуту
+
+        function showModal(message) {
+            document.getElementById('modal').classList.add('show');
+            document.getElementById('nameInput').value = '';
+            document.getElementById('nameInput').focus();
+
+            // Отображаем текст сообщения
+            const messageTextDiv = document.getElementById('modalMessageText');
+            if (message && message.text) {
+                messageTextDiv.textContent = message.text;
+            } else {
+                messageTextDiv.textContent = 'Текст сообщения недоступен';
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('show');
+            stopSound();
+
+            // НЕ добавляем в confirmedIds - сообщение остается активным!
+            // Просто закрываем окно, звук останавливается
+        }
+
+        function confirmMessage() {
+            const name = document.getElementById('nameInput').value.trim();
+
+            if (!name) {
+                alert('Введите имя!');
+                return;
+            }
+
+            socket.emit('confirm', {
+                message_id: currentMessageId,
+                name: name
+            });
+
+            confirmedIds.add(currentMessageId);
+
+            // УДАЛЯЕМ карточку из DOM (исчезает)
+            const card = document.getElementById(`msg-${currentMessageId}`);
+            if (card) {
+                card.style.transition = 'opacity 0.5s, transform 0.5s';
+                card.style.opacity = '0';
+                card.style.transform = 'scale(0.8)';
+
+                setTimeout(() => {
+                    card.remove();
+
+                    // Если больше нет сообщений - показываем "нет сообщений"
+                    const container = document.getElementById('messages');
+                    if (container.children.length === 0) {
+                        container.innerHTML = '<div class="no-messages">Нет новых сообщений</div>';
+                    }
+                }, 500);
+            }
+
+            closeModal();
+        }
+
+        function playSound() {
+            if (!alertSound) return;
+
+            if (soundInterval) clearInterval(soundInterval);
+
+            function beep(freq, dur, vol) {
+                const osc = alertSound.createOscillator();
+                const gain = alertSound.createGain();
+                osc.connect(gain);
+                gain.connect(alertSound.destination);
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(vol, alertSound.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, alertSound.currentTime + dur);
+                osc.start(alertSound.currentTime);
+                osc.stop(alertSound.currentTime + dur);
+            }
+
+            let count = 0;
+            soundInterval = setInterval(() => {
+                beep(count % 2 === 0 ? 1200 : 800, 0.3, 1.0);
+                count++;
+            }, 300);
+
+            if ('vibrate' in navigator) {
+                navigator.vibrate([500, 500]);
+            }
+        }
+
+        function stopSound() {
+            if (soundInterval) {
+                clearInterval(soundInterval);
+                soundInterval = null;
+            }
+            if ('vibrate' in navigator) {
+                navigator.vibrate(0);
+            }
+        }
+
+        function enterFullscreen() {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen().catch(() => {});
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen();
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        document.getElementById('nameInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                confirmMessage();
+            }
+        });
+    </script>
+</body>
+</html>
