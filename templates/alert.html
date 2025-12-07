@@ -364,6 +364,46 @@
         let currentMessageId = null;
         let alertSound = null;
 
+        // Функция для входа в полноэкранный режим
+        function enterFullscreen() {
+            const elem = document.documentElement;
+
+            try {
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen().catch(err => {
+                        console.log('Fullscreen не удалось:', err);
+                    });
+                } else if (elem.webkitRequestFullscreen) { // Safari
+                    elem.webkitRequestFullscreen();
+                } else if (elem.mozRequestFullScreen) { // Firefox
+                    elem.mozRequestFullScreen();
+                } else if (elem.msRequestFullscreen) { // IE/Edge
+                    elem.msRequestFullscreen();
+                }
+            } catch (e) {
+                console.log('Ошибка fullscreen:', e);
+            }
+        }
+
+        // Функция для выхода из полноэкранного режима
+        function exitFullscreen() {
+            try {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(err => {
+                        console.log('Exit fullscreen не удалось:', err);
+                    });
+                } else if (document.webkitExitFullscreen) { // Safari
+                    document.webkitExitFullscreen();
+                } else if (document.mozCancelFullScreen) { // Firefox
+                    document.mozCancelFullScreen();
+                } else if (document.msExitFullscreen) { // IE/Edge
+                    document.msExitFullscreen();
+                }
+            } catch (e) {
+                console.log('Ошибка exit fullscreen:', e);
+            }
+        }
+
         // Создаем звук для привлечения внимания
         function initSound() {
             try {
@@ -375,24 +415,80 @@
             }
         }
 
-        // Воспроизведение звука
+        // Воспроизведение ГРОМКОГО БЕСКОНЕЧНОГО звука
+        let soundInterval = null;
+
         function playAlertSound() {
             if (!alertSound) return;
 
-            const oscillator = alertSound.createOscillator();
-            const gainNode = alertSound.createGain();
+            // Останавливаем предыдущий звук если есть
+            if (soundInterval) {
+                clearInterval(soundInterval);
+            }
 
-            oscillator.connect(gainNode);
-            gainNode.connect(alertSound.destination);
+            // Функция для одного звукового сигнала
+            function beep(frequency, duration, volume) {
+                const oscillator = alertSound.createOscillator();
+                const gainNode = alertSound.createGain();
 
-            oscillator.frequency.value = 800;
-            oscillator.type = 'sine';
+                oscillator.connect(gainNode);
+                gainNode.connect(alertSound.destination);
 
-            gainNode.gain.setValueAtTime(0.3, alertSound.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, alertSound.currentTime + 0.5);
+                oscillator.frequency.value = frequency;
+                oscillator.type = 'sine';
 
-            oscillator.start(alertSound.currentTime);
-            oscillator.stop(alertSound.currentTime + 0.5);
+                gainNode.gain.setValueAtTime(volume, alertSound.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, alertSound.currentTime + duration);
+
+                oscillator.start(alertSound.currentTime);
+                oscillator.stop(alertSound.currentTime + duration);
+            }
+
+            // Играем серию звуков БЕСКОНЕЧНО пока не подтвердят
+            let count = 0;
+            soundInterval = setInterval(() => {
+                if (count % 2 === 0) {
+                    beep(1200, 0.3, 1.0); // Высокий тон, МАКСИМАЛЬНАЯ ГРОМКОСТЬ
+                } else {
+                    beep(800, 0.3, 1.0);  // Низкий тон, МАКСИМАЛЬНАЯ ГРОМКОСТЬ
+                }
+                count++;
+                // БЕСКОНЕЧНЫЙ ЦИКЛ - убрали ограничение
+            }, 300);
+
+            // Вибрация на телефоне (если поддерживается)
+            if ('vibrate' in navigator) {
+                // Вибрируем постоянно: 500мс вибрация, 500мс пауза
+                const vibratePattern = [500, 500];
+                navigator.vibrate(vibratePattern);
+
+                // Повторяем вибрацию каждую секунду
+                const vibrateInterval = setInterval(() => {
+                    navigator.vibrate(vibratePattern);
+                }, 1000);
+
+                // Сохраняем ID для остановки
+                soundInterval.vibrateInterval = vibrateInterval;
+            }
+        }
+
+        // Остановка звука и вибрации
+        function stopAlertSound() {
+            if (soundInterval) {
+                clearInterval(soundInterval);
+
+                // Останавливаем вибрацию если была
+                if (soundInterval.vibrateInterval) {
+                    clearInterval(soundInterval.vibrateInterval);
+                }
+
+                // Останавливаем текущую вибрацию
+                if ('vibrate' in navigator) {
+                    navigator.vibrate(0);
+                }
+
+                soundInterval = null;
+            }
         }
 
         // Системные уведомления браузера
@@ -458,6 +554,12 @@
             // Показываем модальное окно
             modalOverlay.classList.add('active');
 
+            // Переводим браузер в полноэкранный режим
+            enterFullscreen();
+
+            // Переключаем фокус на это окно
+            window.focus();
+
             // Фокус на поле ввода
             setTimeout(() => userName.focus(), 500);
 
@@ -510,6 +612,12 @@
 
             // Закрываем окно
             modalOverlay.classList.remove('active');
+
+            // Останавливаем звук
+            stopAlertSound();
+
+            // Выходим из полноэкранного режима
+            exitFullscreen();
 
             // Восстанавливаем заголовок
             document.title = 'Telegram Alerts - Мониторинг';

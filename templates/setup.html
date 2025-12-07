@@ -174,15 +174,35 @@
                 <h2 style="margin-bottom: 20px;">✅ Готово!</h2>
                 <p style="font-size: 18px; margin-bottom: 20px;">Сессия успешно создана!</p>
                 <p style="font-size: 16px; font-weight: normal; margin-bottom: 20px;">
-                    Нажмите кнопку ниже чтобы скачать session файл. Затем отправьте его ассистенту в чат, и он загрузит его в GitHub.
+                    Скопируйте эту строку и добавьте в переменные окружения Railway:
                 </p>
             </div>
 
-            <a href="/api/download_session" download style="display: inline-block; width: 100%; text-decoration: none;">
-                <button style="background: #10b981; width: 100%;">
-                    📥 Скачать session файл
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; font-weight: bold; margin-bottom: 10px;">
+                    SESSION_STRING:
+                </label>
+                <textarea id="sessionString" readonly style="width: 100%; min-height: 150px; padding: 15px; font-family: monospace; font-size: 12px; border: 2px solid #667eea; border-radius: 10px; background: #f3f4f6;">
+Загрузка...
+                </textarea>
+                <button onclick="copySession()" style="margin-top: 10px; width: 100%; background: #10b981; color: white; padding: 15px; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer;">
+                    📋 Скопировать
                 </button>
-            </a>
+            </div>
+
+            <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 20px; border-radius: 8px; text-align: left;">
+                <h3 style="margin-bottom: 10px; color: #1e40af;">📝 Инструкция:</h3>
+                <ol style="margin-left: 20px; line-height: 1.8;">
+                    <li>Нажмите "Скопировать" выше</li>
+                    <li>Откройте настройки вашего проекта в Railway</li>
+                    <li>Перейдите в раздел <strong>Variables</strong></li>
+                    <li>Добавьте новую переменную:<br>
+                        <code style="background: #dbeafe; padding: 2px 6px; border-radius: 4px;">SESSION_STRING</code> = вставьте скопированную строку
+                    </li>
+                    <li>Railway автоматически перезапустится</li>
+                    <li>Готово! Больше НЕ нужно пересоздавать сессию при обновлениях!</li>
+                </ol>
+            </div>
         </div>
     </div>
 
@@ -263,6 +283,11 @@
                     successDiv.textContent = data.message;
                     successDiv.style.display = 'block';
 
+                    // Сохраняем session_string
+                    if (data.session_string) {
+                        document.getElementById('sessionString').value = data.session_string;
+                    }
+
                     // Переход к шагу 3 через 2 секунды
                     setTimeout(() => {
                         document.getElementById('step2').classList.remove('active');
@@ -290,6 +315,23 @@
         document.getElementById('codeInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') verifyCode();
         });
+
+        function copySession() {
+            const textarea = document.getElementById('sessionString');
+            textarea.select();
+            document.execCommand('copy');
+
+            // Меняем текст кнопки
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = '✅ Скопировано!';
+            btn.style.background = '#10b981';
+
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.style.background = '#10b981';
+            }, 2000);
+        }
     </script>
 </body>
 </html>

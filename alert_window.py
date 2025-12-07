@@ -1,306 +1,502 @@
-"""
-Модуль для создания модального окна уведомления
-"""
-import tkinter as tk
-from tkinter import ttk, scrolledtext
-from datetime import datetime
-import logging
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <title>Telegram Desktop Alerts</title>
 
-logger = logging.getLogger(__name__)
+    <!-- Socket.IO клиент -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" crossorigin="anonymous"></script>
 
+    <style>
+        * {
+            box-sizing: border-box;
+        }
 
-class AlertWindow:
-    """Класс для создания немодального окна уведомления с обязательным подтверждением"""
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #111827;
+            color: #fff;
+        }
 
-    def __init__(self, message_text: str, channel_name: str = ""):
-        """
-        Инициализация окна уведомления
+        body {
+            display: flex;
+            flex-direction: column;
+        }
 
-        Args:
-            message_text: Текст сообщения для отображения
-            channel_name: Название канала (опционально)
-        """
-        self.message_text = message_text
-        self.channel_name = channel_name
-        self.confirmed = False
-        self.user_name = ""
+        .status-bar {
+            padding: 10px 16px;
+            background: #020617;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            border-bottom: 1px solid #1f2937;
+        }
 
-        # Создаем главное окно
-        self.root = tk.Tk()
-        self.root.title("⚠️ НОВОЕ СООБЩЕНИЕ ИЗ TELEGRAM")
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            background: #ef4444;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+        }
 
-        # Делаем окно очень большим и заметным
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
+        .status-dot.connected {
+            background: #22c55e;
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.8);
+        }
 
-        # Окно занимает 80% экрана по центру
-        window_width = int(screen_width * 0.8)
-        window_height = int(screen_height * 0.8)
-        x = (screen_width - window_width) // 2
-        y = (screen_height - window_height) // 2
+        .status-text {
+            opacity: 0.9;
+        }
 
-        self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        .queue-info {
+            padding: 6px 16px;
+            font-size: 13px;
+            color: #9ca3af;
+            border-bottom: 1px solid #1f2937;
+        }
 
-        # Настройки окна - всегда поверх всех окон
-        self.root.attributes('-topmost', True)
-        self.root.lift()
-        self.root.focus_force()
+        .queue-info strong {
+            color: #fbbf24;
+        }
 
-        # Блокируем закрытие окна стандартным способом
-        self.root.protocol("WM_DELETE_WINDOW", self._on_close_attempt)
+        /* Оверлей */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at top, rgba(248, 113, 113, 0.3), transparent 60%),
+                        radial-gradient(circle at bottom, rgba(248, 250, 252, 0.1), transparent 55%),
+                        #111827;
+            z-index: 1000;
+        }
 
-        # Устанавливаем красный фон для привлечения внимания
-        self.root.configure(bg='#ff4444')
+        .overlay.hidden {
+            display: none;
+        }
 
-        self._create_widgets()
+        .alert-card {
+            width: min(900px, 92vw);
+            max-height: 90vh;
+            background: linear-gradient(145deg, #7f1d1d, #b91c1c);
+            border-radius: 24px;
+            padding: 28px 32px;
+            box-shadow:
+                0 30px 60px rgba(0, 0, 0, 0.55),
+                0 0 0 2px rgba(248, 250, 252, 0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            position: relative;
+            overflow: hidden;
+        }
 
-        # Устанавливаем фокус на поле ввода имени
-        self.root.after(100, lambda: self.name_entry.focus_set())
+        .alert-card::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top right, rgba(254, 249, 195, 0.35), transparent 60%);
+            pointer-events: none;
+        }
 
-    def _create_widgets(self):
-        """Создание виджетов интерфейса"""
-        # Основной контейнер с отступами
-        main_frame = tk.Frame(self.root, bg='#ff4444', padx=30, pady=30)
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        .alert-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+            z-index: 1;
+        }
 
-        # Заголовок с предупреждением
-        header_frame = tk.Frame(main_frame, bg='#ff4444')
-        header_frame.pack(fill=tk.X, pady=(0, 20))
+        .alert-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 999px;
+            background: rgba(248, 250, 252, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            border: 1px solid rgba(248, 250, 252, 0.4);
+        }
 
-        warning_label = tk.Label(
-            header_frame,
-            text="⚠️ ВНИМАНИЕ! НОВОЕ СООБЩЕНИЕ ⚠️",
-            font=('Arial', 32, 'bold'),
-            bg='#ff4444',
-            fg='white'
-        )
-        warning_label.pack()
+        .alert-title-block {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
 
-        # Время получения
-        time_label = tk.Label(
-            header_frame,
-            text=f"Получено: {datetime.now().strftime('%H:%M:%S')}",
-            font=('Arial', 16),
-            bg='#ff4444',
-            fg='white'
-        )
-        time_label.pack(pady=(10, 0))
+        .alert-title {
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+        }
 
-        if self.channel_name:
-            channel_label = tk.Label(
-                header_frame,
-                text=f"Канал: {self.channel_name}",
-                font=('Arial', 14),
-                bg='#ff4444',
-                fg='white'
-            )
-            channel_label.pack(pady=(5, 0))
+        .alert-subtitle {
+            font-size: 13px;
+            opacity: 0.85;
+        }
 
-        # Рамка для содержимого сообщения
-        content_frame = tk.Frame(main_frame, bg='white', relief=tk.RAISED, borderwidth=3)
-        content_frame.pack(fill=tk.BOTH, expand=True, pady=20)
+        .meta-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 13px;
+            opacity: 0.95;
+            position: relative;
+            z-index: 1;
+        }
 
-        # Метка "Содержимое сообщения"
-        content_label = tk.Label(
-            content_frame,
-            text="Содержимое сообщения:",
-            font=('Arial', 16, 'bold'),
-            bg='white',
-            anchor='w'
-        )
-        content_label.pack(fill=tk.X, padx=20, pady=(20, 10))
+        .meta-pill {
+            padding: 4px 9px;
+            border-radius: 999px;
+            background: rgba(30, 64, 175, 0.22);
+            border: 1px solid rgba(191, 219, 254, 0.4);
+        }
 
-        # Текстовое поле с прокруткой для сообщения
-        text_widget = scrolledtext.ScrolledText(
-            content_frame,
-            font=('Arial', 14),
-            wrap=tk.WORD,
-            height=15,
-            relief=tk.SUNKEN,
-            borderwidth=2
-        )
-        text_widget.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 20))
-        text_widget.insert('1.0', self.message_text)
-        text_widget.config(state=tk.DISABLED)  # Только для чтения
+        .meta-pill.time {
+            background: rgba(6, 95, 70, 0.25);
+            border-color: rgba(187, 247, 208, 0.55);
+        }
 
-        # Рамка для подтверждения
-        confirm_frame = tk.Frame(main_frame, bg='white', relief=tk.RAISED, borderwidth=3)
-        confirm_frame.pack(fill=tk.X, pady=(0, 20))
+        .meta-pill.queue {
+            background: rgba(30, 64, 175, 0.15);
+            border-color: rgba(191, 219, 254, 0.4);
+        }
 
-        # Внутренний контейнер для отступов
-        confirm_inner = tk.Frame(confirm_frame, bg='white', padx=20, pady=20)
-        confirm_inner.pack(fill=tk.X)
+        .message-box {
+            margin-top: 4px;
+            padding: 14px 16px;
+            border-radius: 16px;
+            background: rgba(15, 23, 42, 0.88);
+            border: 1px solid rgba(248, 250, 252, 0.15);
+            box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.7);
+            white-space: pre-wrap;
+            font-size: 15px;
+            line-height: 1.55;
+            overflow-y: auto;
+            max-height: 40vh;
+        }
 
-        # Инструкция
-        instruction_label = tk.Label(
-            confirm_inner,
-            text="Для закрытия этого окна необходимо:",
-            font=('Arial', 16, 'bold'),
-            bg='white',
-            fg='#ff4444',
-            anchor='w'
-        )
-        instruction_label.pack(fill=tk.X, pady=(0, 15))
+        .form-row {
+            display: flex;
+            gap: 16px;
+            margin-top: 8px;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+        }
 
-        # Поле ввода имени
-        name_frame = tk.Frame(confirm_inner, bg='white')
-        name_frame.pack(fill=tk.X, pady=10)
+        .field {
+            flex: 1 1 220px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 13px;
+        }
 
-        name_label = tk.Label(
-            name_frame,
-            text="1. Введите ваше имя:",
-            font=('Arial', 14),
-            bg='white',
-            anchor='w'
-        )
-        name_label.pack(anchor='w', pady=(0, 5))
+        .field label {
+            opacity: 0.9;
+        }
 
-        self.name_entry = tk.Entry(
-            name_frame,
-            font=('Arial', 14),
-            width=40,
-            relief=tk.SOLID,
-            borderwidth=2
-        )
-        self.name_entry.pack(anchor='w', ipady=5)
-        self.name_entry.bind('<Return>', lambda e: self._confirm())
+        .field input[type="text"] {
+            padding: 8px 10px;
+            border-radius: 10px;
+            border: 1px solid rgba(248, 250, 252, 0.35);
+            background: rgba(15, 23, 42, 0.9);
+            color: #f9fafb;
+            font-size: 14px;
+            outline: none;
+        }
 
-        # Чекбокс подтверждения
-        checkbox_frame = tk.Frame(confirm_inner, bg='white')
-        checkbox_frame.pack(fill=tk.X, pady=10)
+        .field input[type="text"]:focus {
+            border-color: #fbbf24;
+            box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.7);
+        }
 
-        checkbox_label = tk.Label(
-            checkbox_frame,
-            text="2. Подтвердите, что проверили сообщения:",
-            font=('Arial', 14),
-            bg='white',
-            anchor='w'
-        )
-        checkbox_label.pack(anchor='w', pady=(0, 5))
+        .checkbox-row {
+            flex: 1 1 220px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
 
-        self.confirmed_var = tk.BooleanVar()
-        self.confirm_checkbox = tk.Checkbutton(
-            checkbox_frame,
-            text="Я проверил(а) все сообщения и принял(а) меры",
-            font=('Arial', 13),
-            bg='white',
-            variable=self.confirmed_var,
-            activebackground='white'
-        )
-        self.confirm_checkbox.pack(anchor='w')
+        .checkbox-row input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
 
-        # Кнопка подтверждения
-        button_frame = tk.Frame(confirm_inner, bg='white')
-        button_frame.pack(fill=tk.X, pady=(20, 0))
+        .actions-row {
+            margin-top: 10px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+        }
 
-        self.confirm_button = tk.Button(
-            button_frame,
-            text="✓ ПОДТВЕРДИТЬ И ЗАКРЫТЬ",
-            font=('Arial', 16, 'bold'),
-            bg='#44ff44',
-            fg='black',
-            activebackground='#33dd33',
-            command=self._confirm,
-            relief=tk.RAISED,
-            borderwidth=3,
-            padx=30,
-            pady=15,
-            cursor='hand2'
-        )
-        self.confirm_button.pack()
+        .hint {
+            font-size: 12px;
+            opacity: 0.8;
+        }
 
-        # Сообщение об ошибке (скрыто по умолчанию)
-        self.error_label = tk.Label(
-            confirm_inner,
-            text="",
-            font=('Arial', 12, 'bold'),
-            bg='white',
-            fg='#ff0000'
-        )
-        self.error_label.pack(pady=(10, 0))
+        .btn-confirm {
+            padding: 10px 18px;
+            border-radius: 999px;
+            border: none;
+            font-weight: 600;
+            font-size: 14px;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            cursor: pointer;
+            color: #111827;
+            background: linear-gradient(to right, #facc15, #f97316);
+            box-shadow:
+                0 10px 25px rgba(15, 23, 42, 0.7),
+                0 0 0 1px rgba(15, 23, 42, 0.9);
+            transition: transform 0.05s ease, box-shadow 0.05s ease, filter 0.05s ease;
+        }
 
-    def _on_close_attempt(self):
-        """Обработчик попытки закрыть окно"""
-        # Показываем сообщение об ошибке
-        self.error_label.config(
-            text="❌ Окно нельзя закрыть без подтверждения!"
-        )
-        # Мигаем окном для привлечения внимания
-        self.root.bell()
+        .btn-confirm:disabled {
+            opacity: 0.55;
+            cursor: default;
+            filter: grayscale(0.6);
+            box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.8);
+        }
 
-    def _confirm(self):
-        """Обработчик подтверждения"""
-        name = self.name_entry.get().strip()
-        confirmed = self.confirmed_var.get()
+        .btn-confirm:not(:disabled):active {
+            transform: translateY(1px);
+            box-shadow:
+                0 4px 12px rgba(15, 23, 42, 0.9),
+                0 0 0 1px rgba(15, 23, 42, 0.9);
+        }
 
-        # Проверяем, что все поля заполнены
-        if not name:
-            self.error_label.config(text="❌ Пожалуйста, введите ваше имя!")
-            self.name_entry.focus_set()
-            self.root.bell()
-            return
+        @media (max-width: 640px) {
+            .alert-card {
+                padding: 20px 16px;
+                border-radius: 0;
+                width: 100%;
+                height: 100%;
+            }
 
-        if not confirmed:
-            self.error_label.config(text="❌ Пожалуйста, подтвердите проверку сообщений!")
-            self.root.bell()
-            return
+            .message-box {
+                max-height: 50vh;
+            }
 
-        # Все проверки пройдены
-        self.user_name = name
-        self.confirmed = True
+            .form-row {
+                flex-direction: column;
+            }
 
-        logger.info(f"Уведомление подтверждено пользователем: {name}")
+            .actions-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
 
-        # Закрываем окно
-        self.root.quit()
-        self.root.destroy()
+            .btn-confirm {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
 
-    def show(self):
-        """Показать окно и ждать подтверждения"""
-        logger.info("Показываю окно уведомления")
-        self.root.mainloop()
-        return self.user_name, self.confirmed
+    <div class="status-bar">
+        <div id="status-dot" class="status-dot"></div>
+        <div id="status-text" class="status-text">Подключение к серверу...</div>
+    </div>
 
+    <div class="queue-info">
+        Ожидающих уведомлений в очереди: <strong><span id="queue-count">0</span></strong>
+    </div>
 
-def test_window():
-    """Тестовая функция для проверки окна"""
-    test_message = """📋 *Чаты без ответа MCG1 (сегодня):*
+    <div id="alert-overlay" class="overlay hidden">
+        <div class="alert-card">
+            <div class="alert-header">
+                <div class="alert-icon">⚠️</div>
+                <div class="alert-title-block">
+                    <div class="alert-title">Новое сообщение Telegram</div>
+                    <div class="alert-subtitle">
+                        Канал: <span id="channel-name">—</span>
+                    </div>
+                </div>
+            </div>
 
-– KIRYL ILYENKOU (15:32)
-  💬 понял, спасибо
+            <div class="meta-row">
+                <div class="meta-pill time">
+                    Время: <span id="alert-time">—:—</span>,
+                    дата: <span id="alert-date">__.__.____</span>
+                </div>
+                <div class="meta-pill queue">
+                    В очереди ещё: <span id="queue-inline-count">0</span>
+                </div>
+            </div>
 
-– Yelyzaveta Bachiieva (15:02)
-  💬 Будут скорее эти и еще какие-то ,я отпишу сегодня - завтра
+            <div class="message-box" id="message-text">
+                Ожидаю сообщений из Telegram...
+            </div>
 
-– Volodymyr SMIRNOV JDG L (13:29)
-  💬 Да, буду пробовать на следующей неделе!
+            <div class="form-row">
+                <div class="field">
+                    <label for="user-name">Ваше имя (кто видел это сообщение):</label>
+                    <input id="user-name" type="text" autocomplete="off" placeholder="Например: Мария" />
+                </div>
+                <div class="checkbox-row">
+                    <input id="confirm-checkbox" type="checkbox" />
+                    <label for="confirm-checkbox">
+                        Я прочитал(а) сообщение и взял(а) его в работу
+                    </label>
+                </div>
+            </div>
 
-– Polina VITARO SPÓŁKA (13:18)
-  💬 Здравствуйте
-К сожалению нет
-В понедельник займусь и этим и договором
+            <div class="actions-row">
+                <div class="hint">
+                    Уведомление нельзя пропустить — нужно подтвердить и указать имя.
+                </div>
+                <button id="confirm-btn" class="btn-confirm" disabled>
+                    Подтвердить и закрыть
+                </button>
+            </div>
+        </div>
+    </div>
 
-– Павел (13:09)
-  💬 Уточните и я им отпишу 🙏
+    <script>
+        // Элементы
+        const statusDot = document.getElementById("status-dot");
+        const statusText = document.getElementById("status-text");
+        const queueCountEl = document.getElementById("queue-count");
+        const queueInlineEl = document.getElementById("queue-inline-count");
 
-– Plepo SP O.O. Accounting (12:17)
-  💬 .
+        const overlayEl = document.getElementById("alert-overlay");
+        const channelNameEl = document.getElementById("channel-name");
+        const messageTextEl = document.getElementById("message-text");
+        const alertTimeEl = document.getElementById("alert-time");
+        const alertDateEl = document.getElementById("alert-date");
 
-– Ксенія (12:04)
-  💬 Спасибо
+        const userNameInput = document.getElementById("user-name");
+        const confirmCheckbox = document.getElementById("confirm-checkbox");
+        const confirmBtn = document.getElementById("confirm-btn");
 
-– Liza (08:46)
-  💬 [нет текста]"""
+        // Очередь уведомлений
+        const alertQueue = [];
+        let currentAlert = null;
+        let isShowing = false;
 
-    window = AlertWindow(test_message, "Test Channel")
-    user_name, confirmed = window.show()
-    print(f"Пользователь: {user_name}, Подтверждено: {confirmed}")
+        function updateQueueCounters() {
+            const count = alertQueue.length;
+            queueCountEl.textContent = String(count);
+            queueInlineEl.textContent = String(count);
+        }
 
+        function showOverlay(alert) {
+            currentAlert = alert;
+            isShowing = true;
 
-if __name__ == "__main__":
-    # Настройка логирования для теста
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    test_window()
+            channelNameEl.textContent = alert.channel_name || "Канал";
+            messageTextEl.textContent = alert.message_text || "[Без текста]";
+            alertTimeEl.textContent = alert.timestamp || "—:—";
+            alertDateEl.textContent = alert.date || "__.__.____";
+
+            userNameInput.value = "";
+            confirmCheckbox.checked = false;
+            confirmBtn.disabled = true;
+
+            overlayEl.classList.remove("hidden");
+            userNameInput.focus();
+        }
+
+        function hideOverlay() {
+            overlayEl.classList.add("hidden");
+            isShowing = false;
+            currentAlert = null;
+        }
+
+        function showNextAlertIfAny() {
+            updateQueueCounters();
+            if (alertQueue.length === 0) {
+                hideOverlay();
+                return;
+            }
+            const next = alertQueue.shift();
+            updateQueueCounters();
+            showOverlay(next);
+        }
+
+        // Подключение Socket.IO
+        const socket = io();
+
+        socket.on("connect", () => {
+            statusDot.classList.add("connected");
+            statusText.textContent = "Подключено к серверу уведомлений";
+        });
+
+        socket.on("disconnect", () => {
+            statusDot.classList.remove("connected");
+            statusText.textContent = "Нет подключения к серверу";
+        });
+
+        socket.on("connected", (data) => {
+            // Сервер присылает "connected" сразу после подключения — можно игнорировать
+            console.log("Socket.IO handshake:", data);
+        });
+
+        // Главное событие от сервера
+        socket.on("new_alert", (data) => {
+            console.log("new_alert:", data);
+            alertQueue.push(data);
+            if (!isShowing) {
+                showNextAlertIfAny();
+            } else {
+                updateQueueCounters();
+            }
+        });
+
+        // Подтверждение с клиента
+        function canConfirm() {
+            return (
+                currentAlert &&
+                userNameInput.value.trim().length > 0 &&
+                confirmCheckbox.checked
+            );
+        }
+
+        userNameInput.addEventListener("input", () => {
+            confirmBtn.disabled = !canConfirm();
+        });
+
+        confirmCheckbox.addEventListener("change", () => {
+            confirmBtn.disabled = !canConfirm();
+        });
+
+        confirmBtn.addEventListener("click", () => {
+            if (!currentAlert || !canConfirm()) {
+                return;
+            }
+
+            const name = userNameInput.value.trim();
+
+            socket.emit("alert_confirmed", {
+                message_id: currentAlert.message_id,
+                user_name: name,
+            });
+
+            // Переходим сразу к следующему алерту,
+            // ответ от сервера используется только для логов.
+            showNextAlertIfAny();
+        });
+
+        socket.on("confirmation_received", (data) => {
+            console.log("Подтверждение принято сервером:", data);
+        });
+    </script>
+</body>
+</html>

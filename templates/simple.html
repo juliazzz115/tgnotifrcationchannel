@@ -233,9 +233,44 @@
 
         let currentMessageId = null;
         let currentMessageData = null; // Сохраняем данные сообщения
+
+        // Загружаем подтвержденные ID из localStorage
         let confirmedIds = new Set();
+        try {
+            const stored = localStorage.getItem('confirmedIdsWithTime');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                const now = Date.now();
+                const dayAgo = now - (24 * 60 * 60 * 1000); // 24 часа назад
+
+                // Загружаем только свежие (последние 24 часа)
+                const fresh = parsed.filter(item => item.timestamp > dayAgo);
+                confirmedIds = new Set(fresh.map(item => item.id));
+
+                // Сохраняем обратно только свежие (чистим старые)
+                localStorage.setItem('confirmedIdsWithTime', JSON.stringify(fresh));
+
+                console.log('📦 Загружено подтвержденных сообщений из localStorage:', confirmedIds.size);
+                console.log('🧹 Удалено старых записей:', parsed.length - fresh.length);
+            }
+        } catch (e) {
+            console.log('Ошибка загрузки confirmedIds:', e);
+            // Если ошибка - пробуем загрузить старый формат
+            try {
+                const oldStored = localStorage.getItem('confirmedIds');
+                if (oldStored) {
+                    const parsed = JSON.parse(oldStored);
+                    confirmedIds = new Set(parsed);
+                    localStorage.removeItem('confirmedIds'); // Удаляем старый формат
+                }
+            } catch (e2) {
+                console.log('Ошибка миграции со старого формата:', e2);
+            }
+        }
+
         let alertSound = null;
         let soundInterval = null;
+        let allMessages = []; // Храним все незакрытые сообщения
 
         // Звук
         try {
@@ -258,22 +293,25 @@
 
         socket.on('messages_update', (data) => {
             console.log('📥 Получены сообщения:', data);
-            // Фильтруем сообщения - только неподтвержденные и не старше 1 часа
-            const now = new Date();
-            const oneHourAgo = now.getTime() - (60 * 60 * 1000);
 
-            const filteredMessages = data.messages.filter(msg => {
+            if (!data.messages || data.messages.length === 0) {
+                // Если с сервера пришел пустой список - не трогаем allMessages!
+                // Там могут быть свежие сообщения из new_alert
+                return;
+            }
+
+            // Просто добавляем новые сообщения с сервера, если их нет в списке
+            data.messages.forEach(msg => {
                 // Пропускаем подтвержденные
-                if (confirmedIds.has(msg.id)) return false;
+                if (confirmedIds.has(msg.id)) return;
 
-                // Пропускаем старше часа
-                const msgDate = new Date(msg.date.split('.').reverse().join('-') + ' ' + msg.time);
-                if (msgDate.getTime() < oneHourAgo) return false;
-
-                return true;
+                const exists = allMessages.find(m => m.id === msg.id);
+                if (!exists) {
+                    allMessages.push(msg);
+                }
             });
 
-            renderMessages(filteredMessages);
+            renderMessages(allMessages);
         });
 
         socket.on('new_alert', (data) => {
@@ -282,6 +320,17 @@
             currentMessageData = data.message; // Сохраняем данные
 
             if (!confirmedIds.has(currentMessageId)) {
+                // Добавляем сообщение в список, если его там ещё нет
+                const existingIndex = allMessages.findIndex(m => m.id === data.message.id);
+                if (existingIndex === -1) {
+                    allMessages.unshift(data.message); // Добавляем в начало
+                    console.log('✅ Сообщение добавлено в список. Всего сообщений:', allMessages.length);
+                    console.log('Список сообщений:', allMessages.map(m => m.id));
+                    renderMessages(allMessages); // Перерисовываем список
+                } else {
+                    console.log('⚠️ Сообщение уже есть в списке');
+                }
+
                 playSound();
                 showModal(data.message); // Передаем сообщение
                 enterFullscreen();
@@ -367,23 +416,62 @@
             const now = new Date();
             const oneHourAgo = now.getTime() - (60 * 60 * 1000);
 
-            document.querySelectorAll('.message').forEach(card => {
-                const msgId = card.id.replace('msg-', '');
-                const timeText = card.querySelector('.message-time').textContent;
-                const dateText = timeText.split('|')[1]?.trim();
-                const time = timeText.split('|')[0]?.trim();
+            // Удаляем старые сообщения из массива и подтвержденные
+            const oldLength = allMessages.length;
+            allMessages = allMessages.filter(msg => {
+                // Удаляем подтвержденные
+                if (confirmedIds.has(msg.id)) return false;
 
-                if (dateText && time) {
-                    const msgDate = new Date(dateText.split('.').reverse().join('-') + ' ' + time);
-                    if (msgDate.getTime() < oneHourAgo) {
-                        console.log(`Автоудаление старого сообщения #${msgId}`);
-                        card.style.transition = 'opacity 0.5s';
-                        card.style.opacity = '0';
-                        setTimeout(() => card.remove(), 500);
+                // Проверяем возраст сообщения
+                if (!msg.date || !msg.time) {
+                    // Если нет даты - оставляем (свежее сообщение)
+                    return true;
+                }
+
+                try {
+                    const msgDate = new Date(msg.date.split('.').reverse().join('-') + ' ' + msg.time);
+                    const msgTime = msgDate.getTime();
+
+                    if (isNaN(msgTime)) {
+                        // Если не можем распарсить - оставляем
+                        return true;
                     }
+
+                    return msgTime >= oneHourAgo;
+                } catch (e) {
+                    // Ошибка парсинга - оставляем сообщение
+                    console.log('Ошибка парсинга даты для сообщения', msg.id, e);
+                    return true;
                 }
             });
+
+            // Если были удалены - перерисовываем список
+            if (oldLength !== allMessages.length) {
+                console.log(`Автоудаление: удалено ${oldLength - allMessages.length} сообщений`);
+                renderMessages(allMessages);
+            }
         }, 60000); // Проверяем каждую минуту
+
+        // Чистим localStorage от старых подтверждений раз в час
+        setInterval(() => {
+            try {
+                const stored = localStorage.getItem('confirmedIdsWithTime');
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    const now = Date.now();
+                    const dayAgo = now - (24 * 60 * 60 * 1000);
+
+                    const fresh = parsed.filter(item => item.timestamp > dayAgo);
+
+                    if (fresh.length !== parsed.length) {
+                        localStorage.setItem('confirmedIdsWithTime', JSON.stringify(fresh));
+                        console.log(`🧹 Очищено старых подтверждений из localStorage: ${parsed.length - fresh.length}`);
+                    }
+                }
+            } catch (e) {
+                console.log('Ошибка очистки localStorage:', e);
+            }
+        }, 60 * 60 * 1000); // Раз в час
 
         function showModal(message) {
             document.getElementById('modal').classList.add('show');
@@ -400,6 +488,10 @@
         }
 
         function closeModal() {
+            console.log('❌ Нажата кнопка "Позже" для сообщения', currentMessageId);
+            console.log('Сообщение остается в списке. Всего сообщений:', allMessages.length);
+            console.log('Список ID:', allMessages.map(m => m.id));
+
             document.getElementById('modal').classList.remove('show');
             stopSound();
 
@@ -421,6 +513,29 @@
             });
 
             confirmedIds.add(currentMessageId);
+
+            // Сохраняем в localStorage с временной меткой
+            try {
+                const stored = localStorage.getItem('confirmedIdsWithTime');
+                let data = [];
+                if (stored) {
+                    data = JSON.parse(stored);
+                }
+
+                // Добавляем новый ID с текущим временем
+                data.push({
+                    id: currentMessageId,
+                    timestamp: Date.now()
+                });
+
+                localStorage.setItem('confirmedIdsWithTime', JSON.stringify(data));
+                console.log('💾 Сохранено в localStorage. Всего подтвержденных:', confirmedIds.size);
+            } catch (e) {
+                console.log('Ошибка сохранения в localStorage:', e);
+            }
+
+            // Удаляем из массива сообщений
+            allMessages = allMessages.filter(m => m.id !== currentMessageId);
 
             // УДАЛЯЕМ карточку из DOM (исчезает)
             const card = document.getElementById(`msg-${currentMessageId}`);
