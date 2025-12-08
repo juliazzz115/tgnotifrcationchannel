@@ -502,9 +502,9 @@ class DialogScanner:
                     logger.info(f"🧹 Автоочистка: удалено {cleaned_count} статусов")
                     save_statuses(updated_statuses)
 
-                # Собираем ВСЕ диалоги для аналитики (раз в 10 минут)
-                if scan_count % 3 == 0:  # Каждое 3-е сканирование (каждые 9 минут)
-                    logger.info("📊 Сбор всех диалогов для аналитики...")
+                # Собираем диалоги для аналитики (первый раз сразу, потом каждое 3-е сканирование)
+                if scan_count == 1 or scan_count % 3 == 0:
+                    logger.info("📊 Сбор диалогов для аналитики...")
                     all_dialogs = await self.scan_all_dialogs_for_analytics()
                     all_dialogs_for_analytics = all_dialogs
 
@@ -614,22 +614,10 @@ def update_status():
 
 @app.route('/api/analytics', methods=['GET'])
 def get_analytics():
-    """Получить аналитику по ВСЕМ диалогам за день (00:00-17:00)"""
-    global all_dialogs_for_analytics
+    """Получить аналитику по диалогам"""
+    # Используем данные из фонового сбора или неотвеченные диалоги как fallback
+    dialogs_to_analyze = all_dialogs_for_analytics if all_dialogs_for_analytics else unanswered_dialogs
     
-    # Если данных нет или они устарели, загружаем on-demand
-    if not all_dialogs_for_analytics and telegram_client:
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            scanner = DialogScanner()
-            scanner.client = telegram_client
-            all_dialogs_for_analytics = loop.run_until_complete(scanner.scan_all_dialogs_for_analytics())
-            loop.close()
-        except Exception as e:
-            logger.error(f"Ошибка загрузки аналитики on-demand: {e}")
-    
-    dialogs_to_analyze = all_dialogs_for_analytics if all_dialogs_for_analytics else []
     daily_stats = detailed_analyzer.calculate_daily_stats(dialogs_to_analyze)
 
     return jsonify({
