@@ -411,15 +411,6 @@
             background: #0052a3;
         }
 
-        .btn-take {
-            background: #ff8c42;
-            color: white;
-        }
-
-        .btn-take:hover {
-            background: #ff7221;
-        }
-
         .btn-task {
             background: #17bf63;
             color: white;
@@ -687,7 +678,6 @@
 
                             <div class="action-buttons">
                                 <button class="btn btn-chat" onclick="openChat('${dialog.chat_link}')">💬 Открыть чат</button>
-                                ${dialog.status !== 'in-progress' ? `<button class="btn btn-take" onclick="updateStatus(${dialog.id}, 'in-progress')">🟡 Взять в работу</button>` : ''}
                                 ${dialog.status !== 'task' ? `<button class="btn btn-task" onclick="setTask(${dialog.id})">🟢 Поставить задачу</button>` : ''}
                                 ${dialog.status !== 'done' ? `<button class="btn btn-done" onclick="updateStatus(${dialog.id}, 'done')">✅ Решено</button>` : ''}
                             </div>
