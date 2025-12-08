@@ -284,7 +284,6 @@
                 <div class="nav-tabs">
                     <a href="/manager" class="nav-tab">Диалоги</a>
                     <a href="/analytics" class="nav-tab active">Аналитика</a>
-                    <a href="/messages" class="nav-tab">Уведомления</a>
                 </div>
                 <div class="status">
                     <span class="status-dot" id="status-dot"></span>
@@ -335,6 +334,72 @@
 
         <div class="details-section">
             <div class="section-title">Детальный анализ диалогов</div>
+            
+            <!-- Панель фильтров -->
+            <div style="background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                    <div>
+                        <label style="display: block; font-size: 13px; font-weight: 600; color: #657786; margin-bottom: 8px;">
+                            Качество ответа:
+                        </label>
+                        <select id="filter-quality" style="width: 100%; padding: 10px; border: 1px solid #e1e8ed; border-radius: 8px; font-size: 14px;">
+                            <option value="">Все</option>
+                            <option value="отлично">Отлично (<15 мин)</option>
+                            <option value="хорошо">Хорошо (15-30 мин)</option>
+                            <option value="приемлемо">Приемлемо (30-60 мин)</option>
+                            <option value="долго">Долго (1-1.5ч)</option>
+                            <option value="очень_долго">Очень долго (>1.5ч)</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label style="display: block; font-size: 13px; font-weight: 600; color: #657786; margin-bottom: 8px;">
+                            Представился:
+                        </label>
+                        <select id="filter-introduced" style="width: 100%; padding: 10px; border: 1px solid #e1e8ed; border-radius: 8px; font-size: 14px;">
+                            <option value="">Все</option>
+                            <option value="true">Да</option>
+                            <option value="false">Нет</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label style="display: block; font-size: 13px; font-weight: 600; color: #657786; margin-bottom: 8px;">
+                            Оценка AI:
+                        </label>
+                        <select id="filter-score" style="width: 100%; padding: 10px; border: 1px solid #e1e8ed; border-radius: 8px; font-size: 14px;">
+                            <option value="">Все</option>
+                            <option value="high">Высокая (8-10)</option>
+                            <option value="medium">Средняя (5-7)</option>
+                            <option value="low">Низкая (1-4)</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label style="display: block; font-size: 13px; font-weight: 600; color: #657786; margin-bottom: 8px;">
+                            Сортировка:
+                        </label>
+                        <select id="sort-by" style="width: 100%; padding: 10px; border: 1px solid #e1e8ed; border-radius: 8px; font-size: 14px;">
+                            <option value="time-desc">Время (новые)</option>
+                            <option value="time-asc">Время (старые)</option>
+                            <option value="response-asc">Быстрый ответ</option>
+                            <option value="response-desc">Медленный ответ</option>
+                            <option value="score-desc">Высокая оценка</option>
+                            <option value="score-asc">Низкая оценка</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 15px; display: flex; gap: 10px;">
+                    <button onclick="applyFilters()" style="flex: 1; padding: 12px; background: #1da1f2; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px;">
+                        Применить фильтры
+                    </button>
+                    <button onclick="resetFilters()" style="padding: 12px 24px; background: #e1e8ed; color: #14171a; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px;">
+                        Сбросить
+                    </button>
+                </div>
+            </div>
+            
             <div id="dialogDetails">
                 <div class="no-data">Загрузка данных...</div>
             </div>
@@ -580,6 +645,83 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // Глобальное хранилище данных
+        let allDialogsData = [];
+
+        // Обновленная загрузка аналитики
+        function loadAnalytics() {
+            fetch('/api/analytics')
+                .then(res => res.json())
+                .then(data => {
+                    allDialogsData = data.dialogs;
+                    renderAnalytics(data);
+                })
+                .catch(err => console.error('Ошибка загрузки:', err));
+        }
+
+        // Применить фильтры
+        function applyFilters() {
+            const quality = document.getElementById('filter-quality').value;
+            const introduced = document.getElementById('filter-introduced').value;
+            const score = document.getElementById('filter-score').value;
+            const sortBy = document.getElementById('sort-by').value;
+
+            let filtered = [...allDialogsData];
+
+            // Фильтр по качеству
+            if (quality) {
+                filtered = filtered.filter(d => d.response_quality === quality);
+            }
+
+            // Фильтр по представлению
+            if (introduced) {
+                const isIntroduced = introduced === 'true';
+                filtered = filtered.filter(d => d.introduced === isIntroduced);
+            }
+
+            // Фильтр по оценке AI
+            if (score) {
+                filtered = filtered.filter(d => {
+                    const s = d.professionalism_score || 0;
+                    if (score === 'high') return s >= 8;
+                    if (score === 'medium') return s >= 5 && s < 8;
+                    if (score === 'low') return s < 5;
+                    return true;
+                });
+            }
+
+            // Сортировка
+            filtered.sort((a, b) => {
+                switch(sortBy) {
+                    case 'time-desc':
+                        return (b.timestamp || 0) - (a.timestamp || 0);
+                    case 'time-asc':
+                        return (a.timestamp || 0) - (b.timestamp || 0);
+                    case 'response-asc':
+                        return (a.response_delay_working_minutes || 999) - (b.response_delay_working_minutes || 999);
+                    case 'response-desc':
+                        return (b.response_delay_working_minutes || 0) - (a.response_delay_working_minutes || 0);
+                    case 'score-desc':
+                        return (b.professionalism_score || 0) - (a.professionalism_score || 0);
+                    case 'score-asc':
+                        return (a.professionalism_score || 0) - (b.professionalism_score || 0);
+                    default:
+                        return 0;
+                }
+            });
+
+            renderDialogDetails(filtered);
+        }
+
+        // Сбросить фильтры
+        function resetFilters() {
+            document.getElementById('filter-quality').value = '';
+            document.getElementById('filter-introduced').value = '';
+            document.getElementById('filter-score').value = '';
+            document.getElementById('sort-by').value = 'time-desc';
+            renderDialogDetails(allDialogsData);
         }
 
         loadAnalytics();
