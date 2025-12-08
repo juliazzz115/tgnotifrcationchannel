@@ -725,7 +725,7 @@
 
                 // 🤖 Блок AI анализа
                 let analysisHtml = '';
-                if (dialog.client_emotion || dialog.warnings || dialog.recommendations) {
+                if (dialog.client_emotion || dialog.recommendations) {
                     analysisHtml = '<div class="analysis-block">';
 
                     // Верхняя строка: настроение + представление
@@ -743,16 +743,7 @@
                     }
                     analysisHtml += '</div>';
 
-                    // Предупреждения
-                    if (dialog.warnings && dialog.warnings.length > 0) {
-                        analysisHtml += '<div class="analysis-warnings">';
-                        dialog.warnings.forEach(warning => {
-                            analysisHtml += `<div class="warning-item">${warning}</div>`;
-                        });
-                        analysisHtml += '</div>';
-                    }
-
-                    // Рекомендации
+                    // Рекомендации (warnings убраны)
                     if (dialog.recommendations && dialog.recommendations.length > 0) {
                         analysisHtml += '<div class="analysis-recommendations">';
                         analysisHtml += '<div class="rec-title">💡 Рекомендации:</div>';
