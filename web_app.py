@@ -46,6 +46,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 # Глобальные переменные
 telegram_client = None
 unanswered_dialogs = []
+all_dialogs_for_analytics = []  # ВСЕ диалоги за день для аналитики
 
 # Файл для хранения статусов
 STATUS_FILE = 'dialog_statuses.json'
@@ -305,9 +306,130 @@ class DialogScanner:
             logger.error(f"❌ Ошибка сканирования: {e}", exc_info=True)
             return []
 
+    async def scan_all_dialogs_for_analytics(self):
+        """Получить ВСЕ диалоги за сегодня для аналитики (00:00-17:00)"""
+        try:
+            me = await self.client.get_me()
+            dialogs = await self.client.get_dialogs(limit=500)
+
+            all_dialogs = []
+            
+            now = datetime.now(LOCAL_TZ)
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            analytics_end = now.replace(hour=17, minute=0, second=0, microsecond=0)
+
+            logger.info(f"📊 Сбор ВСЕХ диалогов за период {today_start.strftime('%H:%M')} - {analytics_end.strftime('%H:%M')}")
+
+            for dialog in dialogs:
+                if is_excluded(dialog):
+                    continue
+
+                entity = dialog.entity
+
+                if getattr(entity, 'bot', False) or entity.id == me.id:
+                    continue
+
+                if hasattr(entity, 'broadcast') or hasattr(entity, 'megagroup'):
+                    continue
+
+                name = dialog.name or getattr(entity, 'username', 'Без имени')
+
+                # Получаем ВСЕ сообщения за сегодня (00:00 - 17:00)
+                all_messages_for_analysis = []
+                try:
+                    async for msg in self.client.iter_messages(entity, limit=None):
+                        msg_local_time = msg.date.astimezone(LOCAL_TZ)
+                        
+                        # Фильтр: только сообщения с 00:00 до 17:00 сегодня
+                        if msg_local_time < today_start:
+                            break
+                        if msg_local_time > analytics_end:
+                            continue
+                        
+                        msg_sender = await msg.get_sender()
+                        is_from_me = msg_sender and msg_sender.id == me.id if msg_sender else False
+
+                        all_messages_for_analysis.append({
+                            'text': msg.message or '[нет текста]',
+                            'time': msg_local_time.strftime('%H:%M'),
+                            'from_me': is_from_me,
+                            'sender_name': 'Вы' if is_from_me else name,
+                            'timestamp': msg.date.timestamp()
+                        })
+
+                    all_messages_for_analysis.reverse()
+                except Exception as e:
+                    logger.warning(f"Не удалось получить сообщения для {name}: {e}")
+                    continue
+
+                # Пропускаем диалоги без сообщений за период
+                if not all_messages_for_analysis:
+                    continue
+
+                # Анализ времени ответа
+                response_analysis = detailed_analyzer.analyze_response_times(all_messages_for_analysis)
+                all_responses_analysis = detailed_analyzer.analyze_all_response_times(all_messages_for_analysis)
+                manager_analysis = detailed_analyzer.analyze_manager_behavior(all_messages_for_analysis)
+                
+                # Google AI анализ
+                ai_analysis = {}
+                try:
+                    ai_analysis = google_ai_analyzer.analyze_dialog_with_ai(all_messages_for_analysis)
+                except Exception as e:
+                    logger.warning(f"Google AI анализ не удался для {name}: {e}")
+
+                # Формируем ссылку на чат
+                chat_link = ""
+                if hasattr(entity, 'username') and entity.username:
+                    chat_link = f"https://t.me/{entity.username}"
+                else:
+                    chat_link = f"tg://openmessage?user_id={entity.id}"
+
+                last_msg_time = all_messages_for_analysis[-1]['time'] if all_messages_for_analysis else ''
+                last_msg_timestamp = all_messages_for_analysis[-1]['timestamp'] if all_messages_for_analysis else 0
+
+                all_dialogs.append({
+                    'id': entity.id,
+                    'name': name,
+                    'time': last_msg_time,
+                    'date': now.strftime('%d.%m.%Y'),
+                    'chat_link': chat_link,
+                    'timestamp': last_msg_timestamp,
+                    # Детальный анализ
+                    'introduced': manager_analysis.get('introduced'),
+                    'manager_name': manager_analysis.get('manager_name'),
+                    'greeting': manager_analysis.get('used_greeting'),
+                    'response_delay_minutes': response_analysis.get('response_delay_minutes'),
+                    'response_delay_working_minutes': response_analysis.get('response_delay_working_minutes'),
+                    'response_delay_hours': response_analysis.get('response_delay_hours'),
+                    'response_quality': response_analysis.get('response_quality'),
+                    'is_overtime': response_analysis.get('is_overtime'),
+                    'waiting_first_response_minutes': response_analysis.get('waiting_first_response_minutes'),
+                    'avg_response_time_minutes': all_responses_analysis.get('avg_response_time_minutes'),
+                    'total_client_messages': all_responses_analysis.get('total_client_messages'),
+                    'total_responses': all_responses_analysis.get('total_responses'),
+                    'message_count': manager_analysis.get('message_count'),
+                    'politeness_markers': manager_analysis.get('politeness_markers'),
+                    # Google AI анализ
+                    'professionalism_score': ai_analysis.get('professionalism_score'),
+                    'ai_suggestions': ai_analysis.get('suggestions', []),
+                    'ai_key_issues': ai_analysis.get('key_issues', []),
+                    'ai_strengths': ai_analysis.get('strengths', []),
+                    'response_tone': ai_analysis.get('response_tone'),
+                    'greeting_quality': ai_analysis.get('greeting_quality'),
+                    'client_emotion': '😐'
+                })
+
+            logger.info(f"📊 Собрано диалогов для аналитики: {len(all_dialogs)}")
+            return all_dialogs
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка сбора диалогов для аналитики: {e}", exc_info=True)
+            return []
+
     async def scan_forever(self):
         """Бесконечное сканирование"""
-        global telegram_client, unanswered_dialogs
+        global telegram_client, unanswered_dialogs, all_dialogs_for_analytics
 
         try:
             logger.info("=" * 80)
@@ -379,6 +501,12 @@ class DialogScanner:
                     logger.info(f"🧹 Автоочистка: удалено {cleaned_count} статусов")
                     save_statuses(updated_statuses)
 
+                # Собираем ВСЕ диалоги для аналитики (раз в 10 минут)
+                if scan_count % 3 == 0:  # Каждое 3-е сканирование (каждые 9 минут)
+                    logger.info("📊 Сбор всех диалогов для аналитики...")
+                    all_dialogs = await self.scan_all_dialogs_for_analytics()
+                    all_dialogs_for_analytics = all_dialogs
+
                 logger.info(f"⏳ Следующее сканирование через 3 минуты...")
                 await asyncio.sleep(180)
 
@@ -421,14 +549,6 @@ def analytics():
     if not session_exists:
         return redirect('/setup')
     return render_template('analytics.html')
-
-
-@app.route('/messages')
-def messages():
-    """Страница уведомлений"""
-    if not session_exists:
-        return redirect('/setup')
-    return render_template('messages.html')
 
 
 @app.route('/setup')
@@ -493,25 +613,14 @@ def update_status():
 
 @app.route('/api/analytics', methods=['GET'])
 def get_analytics():
-    """Получить аналитику по диалогам"""
-    statuses = load_statuses()
-
-    enriched_dialogs = []
-    for dialog in unanswered_dialogs:
-        dialog_id = str(dialog['id'])
-        enriched = dialog.copy()
-        if dialog_id in statuses:
-            enriched.update(statuses[dialog_id])
-        else:
-            enriched['status'] = 'new'
-            enriched['manager'] = ''
-            enriched['note'] = ''
-        enriched_dialogs.append(enriched)
-
-    daily_stats = detailed_analyzer.calculate_daily_stats(enriched_dialogs)
+    """Получить аналитику по ВСЕМ диалогам за день (00:00-17:00)"""
+    # Используем все диалоги за день, а не только неотвеченные
+    dialogs_to_analyze = all_dialogs_for_analytics if all_dialogs_for_analytics else []
+    
+    daily_stats = detailed_analyzer.calculate_daily_stats(dialogs_to_analyze)
 
     return jsonify({
-        'dialogs': enriched_dialogs,
+        'dialogs': dialogs_to_analyze,
         'daily_stats': daily_stats
     })
 
