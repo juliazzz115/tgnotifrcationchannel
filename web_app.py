@@ -155,7 +155,6 @@ class DialogScanner:
                 if dialog.unread_count == 0 and sender and sender.id != me.id:
                     name = dialog.name or getattr(entity, 'username', 'Без имени')
                     local_time = last_msg.date.astimezone(LOCAL_TZ)
-                    message_text = last_msg.message or '[нет текста]'
 
                     # Время без ответа
                     now = datetime.now(LOCAL_TZ)
@@ -165,6 +164,31 @@ class DialogScanner:
                     # ФИЛЬТР: Показываем только если > 1 часа без ответа
                     if hours_ago < 1.0:
                         continue
+
+                    # Получаем последние 3 сообщения для контекста
+                    recent_messages = []
+                    try:
+                        async for msg in self.client.iter_messages(entity, limit=3):
+                            msg_sender = await msg.get_sender()
+                            is_from_me = msg_sender and msg_sender.id == me.id if msg_sender else False
+
+                            recent_messages.append({
+                                'text': msg.message or '[нет текста]',
+                                'time': msg.date.astimezone(LOCAL_TZ).strftime('%H:%M'),
+                                'from_me': is_from_me,
+                                'sender_name': 'Вы' if is_from_me else name
+                            })
+
+                        # Разворачиваем чтобы старые были первыми
+                        recent_messages.reverse()
+                    except Exception as e:
+                        logger.error(f"Ошибка получения истории для {name}: {e}")
+                        recent_messages = [{
+                            'text': last_msg.message or '[нет текста]',
+                            'time': local_time.strftime('%H:%M'),
+                            'from_me': False,
+                            'sender_name': name
+                        }]
 
                     # Формируем ссылку на чат
                     chat_link = ""
@@ -178,7 +202,8 @@ class DialogScanner:
                         'name': name,
                         'time': local_time.strftime('%H:%M'),
                         'date': local_time.strftime('%d.%m.%Y'),
-                        'text': message_text.strip()[:200],  # Первые 200 символов
+                        'text': (last_msg.message or '[нет текста]').strip()[:200],  # Последнее сообщение
+                        'messages': recent_messages,  # История последних 3
                         'hours_ago': round(hours_ago, 1),
                         'chat_link': chat_link,
                         'timestamp': last_msg.date.timestamp()
