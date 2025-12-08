@@ -320,20 +320,13 @@
             </div>
         </div>
 
-        <div class="charts-grid">
-            <div class="chart-card">
-                <div class="chart-title">Распределение времени ответа</div>
-                <canvas id="responseTimeChart"></canvas>
-            </div>
-
-            <div class="chart-card">
-                <div class="chart-title">Качество обслуживания</div>
-                <canvas id="qualityChart"></canvas>
-            </div>
-        </div>
-
         <div class="details-section">
-            <div class="section-title">Детальный анализ диалогов</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div class="section-title">Детальный анализ диалогов</div>
+                <a href="/api/export_analytics_csv" download style="padding: 12px 24px; background: #10b981; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; gap: 8px;">
+                    📊 Скачать сводку для руководства
+                </a>
+            </div>
             
             <!-- Панель фильтров -->
             <div style="background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
@@ -412,9 +405,6 @@
             reconnection: true
         });
 
-        let responseTimeChart = null;
-        let qualityChart = null;
-
         socket.on('connect', () => {
             console.log('✅ Подключено');
             document.getElementById('connection-status').textContent = 'Онлайн';
@@ -456,91 +446,7 @@
 
             document.getElementById('stat-introduced').textContent = `${stats.introduced_percentage}%`;
 
-            renderCharts(stats);
             renderDialogDetails(dialogs);
-        }
-
-        function renderCharts(stats) {
-            const qualityDist = stats.quality_distribution || {};
-
-            const qualityLabels = {
-                'отлично': 'Отлично (<15 мин)',
-                'хорошо': 'Хорошо (15-30 мин)',
-                'приемлемо': 'Приемлемо (30-60 мин)',
-                'долго': 'Долго (1-1.5ч)',
-                'очень_долго': 'Очень долго (>1.5ч)',
-                'нет_ответа': 'Нет ответа'
-            };
-
-            const qualityColors = {
-                'отлично': '#10b981',
-                'хорошо': '#34d399',
-                'приемлемо': '#fbbf24',
-                'долго': '#fb923c',
-                'очень_долго': '#ef4444',
-                'нет_ответа': '#6b7280'
-            };
-
-            const labels = Object.keys(qualityDist).map(k => qualityLabels[k] || k);
-            const values = Object.values(qualityDist);
-            const colors = Object.keys(qualityDist).map(k => qualityColors[k] || '#6b7280');
-
-            if (responseTimeChart) responseTimeChart.destroy();
-            if (qualityChart) qualityChart.destroy();
-
-            const ctx1 = document.getElementById('responseTimeChart').getContext('2d');
-            responseTimeChart = new Chart(ctx1, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Количество диалогов',
-                        data: values,
-                        backgroundColor: colors,
-                        borderRadius: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                stepSize: 1
-                            }
-                        }
-                    }
-                }
-            });
-
-            const ctx2 = document.getElementById('qualityChart').getContext('2d');
-            qualityChart = new Chart(ctx2, {
-                type: 'doughnut',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: values,
-                        backgroundColor: colors,
-                        borderWidth: 2,
-                        borderColor: '#fff'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
-                        }
-                    }
-                }
-            });
         }
 
         function renderDialogDetails(dialogs) {
@@ -616,13 +522,44 @@
                         </div>
 
                         ${dialog.professionalism_score ? `
-                            <div style="margin-top: 12px; padding: 12px; background: white; border-radius: 6px;">
-                                <span style="font-size: 13px; color: #657786; font-weight: 600;">
-                                    Оценка профессионализма: 
-                                </span>
-                                <span style="font-size: 16px; font-weight: 700; color: ${dialog.professionalism_score >= 8 ? '#17bf63' : dialog.professionalism_score >= 6 ? '#fbbf24' : '#ef4444'}">
-                                    ${dialog.professionalism_score}/10
-                                </span>
+                            <div style="margin-top: 12px; padding: 12px; background: white; border-radius: 6px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
+                                <div>
+                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Профессионализм:</span>
+                                    <span style="font-size: 16px; font-weight: 700; color: ${dialog.professionalism_score >= 8 ? '#17bf63' : dialog.professionalism_score >= 6 ? '#fbbf24' : '#ef4444'}">
+                                        ${dialog.professionalism_score}/10
+                                    </span>
+                                </div>
+                                ${dialog.politeness_score ? `
+                                <div>
+                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Вежливость:</span>
+                                    <span style="font-size: 14px; font-weight: 600;">${dialog.politeness_score}/10</span>
+                                </div>
+                                ` : ''}
+                                ${dialog.clarity_score ? `
+                                <div>
+                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Ясность:</span>
+                                    <span style="font-size: 14px; font-weight: 600;">${dialog.clarity_score}/10</span>
+                                </div>
+                                ` : ''}
+                                ${dialog.proactivity_score ? `
+                                <div>
+                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Проактивность:</span>
+                                    <span style="font-size: 14px; font-weight: 600;">${dialog.proactivity_score}/10</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+
+                        ${dialog.risk_level || dialog.churn_risk_level ? `
+                            <div style="margin-top: 12px; padding: 12px; background: ${dialog.risk_level === 'high' || dialog.risk_level === 'critical' ? '#fef2f2' : '#f0fdf4'}; border-radius: 6px; border-left: 3px solid ${dialog.risk_level === 'high' || dialog.risk_level === 'critical' ? '#ef4444' : '#10b981'};">
+                                <div style="font-size: 13px; font-weight: 600; margin-bottom: 4px;">
+                                    ${dialog.risk_level === 'high' || dialog.risk_level === 'critical' ? '⚠️' : '✅'} 
+                                    Риск: ${dialog.risk_level || 'low'} 
+                                    ${dialog.churn_risk_level ? ` | Риск ухода: ${dialog.churn_risk_level}` : ''}
+                                </div>
+                                ${dialog.resolution_status ? `
+                                <div style="font-size: 12px; color: #657786;">Статус: ${dialog.resolution_status}</div>
+                                ` : ''}
                             </div>
                         ` : ''}
 
