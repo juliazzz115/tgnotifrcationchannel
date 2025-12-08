@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Настройка Telegram сессии</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 50px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 36px;
+        }
+
+        .step {
+            display: none;
+            animation: fadeIn 0.5s;
+        }
+
+        .step.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .info {
+            background: #eff6ff;
+            border-left: 4px solid #3b82f6;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-radius: 8px;
+        }
+
+        .info p {
+            color: #1e40af;
+            line-height: 1.6;
+            font-size: 16px;
+        }
+
+        input {
+            width: 100%;
+            padding: 15px;
+            font-size: 18px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            font-size: 20px;
+            font-weight: bold;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .error {
+            background: #fee2e2;
+            border-left: 4px solid #dc2626;
+            color: #991b1b;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+
+        .success {
+            background: #d1fae5;
+            border-left: 4px solid #10b981;
+            color: #065f46;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Настройка Telegram</h1>
+
+        <!-- Шаг 1: Ввод номера телефона -->
+        <div id="step1" class="step active">
+            <div class="info">
+                <p><strong>Шаг 1:</strong> Введите номер телефона, привязанный к вашему Telegram аккаунту.</p>
+                <p style="margin-top: 10px;">Формат: +7XXXXXXXXXX</p>
+            </div>
+
+            <div id="error1" style="display: none;" class="error"></div>
+
+            <input type="tel" id="phoneInput" placeholder="+7XXXXXXXXXX" autocomplete="tel">
+            <button onclick="sendCode()" id="sendBtn">Отправить код</button>
+        </div>
+
+        <!-- Шаг 2: Ввод кода -->
+        <div id="step2" class="step">
+            <div class="info">
+                <p><strong>Шаг 2:</strong> Введите код подтверждения, который был отправлен в Telegram на ваш номер.</p>
+            </div>
+
+            <div id="error2" style="display: none;" class="error"></div>
+            <div id="success" style="display: none;" class="success"></div>
+
+            <input type="text" id="codeInput" placeholder="12345" maxlength="5">
+            <button onclick="verifyCode()" id="verifyBtn">Подтвердить</button>
+        </div>
+
+        <!-- Шаг 3: Готово -->
+        <div id="step3" class="step">
+            <div class="success" style="text-align: center; padding: 30px;">
+                <h2 style="margin-bottom: 20px;">✅ Готово!</h2>
+                <p style="font-size: 18px; margin-bottom: 20px;">Сессия успешно создана!</p>
+                <p style="font-size: 16px; font-weight: normal; margin-bottom: 20px;">
+                    Скопируйте эту строку и добавьте в переменные окружения Railway:
+                </p>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; font-weight: bold; margin-bottom: 10px;">
+                    SESSION_STRING:
+                </label>
+                <textarea id="sessionString" readonly style="width: 100%; min-height: 150px; padding: 15px; font-family: monospace; font-size: 12px; border: 2px solid #667eea; border-radius: 10px; background: #f3f4f6;">
+Загрузка...
+                </textarea>
+                <button onclick="copySession()" style="margin-top: 10px; width: 100%; background: #10b981; color: white; padding: 15px; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer;">
+                    📋 Скопировать
+                </button>
+            </div>
+
+            <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 20px; border-radius: 8px; text-align: left;">
+                <h3 style="margin-bottom: 10px; color: #1e40af;">📝 Инструкция:</h3>
+                <ol style="margin-left: 20px; line-height: 1.8;">
+                    <li>Нажмите "Скопировать" выше</li>
+                    <li>Откройте настройки вашего проекта в Railway</li>
+                    <li>Перейдите в раздел <strong>Variables</strong></li>
+                    <li>Добавьте новую переменную:<br>
+                        <code style="background: #dbeafe; padding: 2px 6px; border-radius: 4px;">SESSION_STRING</code> = вставьте скопированную строку
+                    </li>
+                    <li>Railway автоматически перезапустится</li>
+                    <li>Готово! Больше НЕ нужно пересоздавать сессию при обновлениях!</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function sendCode() {
+            const phone = document.getElementById('phoneInput').value.trim();
+            const errorDiv = document.getElementById('error1');
+            const btn = document.getElementById('sendBtn');
+
+            if (!phone) {
+                errorDiv.textContent = 'Введите номер телефона!';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            errorDiv.style.display = 'none';
+            btn.disabled = true;
+            btn.textContent = 'Отправка...';
+
+            try {
+                const response = await fetch('/api/send_code', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ phone: phone })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Переход к шагу 2
+                    document.getElementById('step1').classList.remove('active');
+                    document.getElementById('step2').classList.add('active');
+                } else {
+                    errorDiv.textContent = data.error || 'Ошибка отправки кода';
+                    errorDiv.style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = 'Отправить код';
+                }
+            } catch (e) {
+                errorDiv.textContent = 'Ошибка соединения: ' + e.message;
+                errorDiv.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = 'Отправить код';
+            }
+        }
+
+        async function verifyCode() {
+            const code = document.getElementById('codeInput').value.trim();
+            const errorDiv = document.getElementById('error2');
+            const successDiv = document.getElementById('success');
+            const btn = document.getElementById('verifyBtn');
+
+            if (!code) {
+                errorDiv.textContent = 'Введите код!';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+            btn.disabled = true;
+            btn.textContent = 'Проверка...';
+
+            try {
+                const response = await fetch('/api/verify_code', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ code: code })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    successDiv.textContent = data.message;
+                    successDiv.style.display = 'block';
+
+                    // Сохраняем session_string
+                    if (data.session_string) {
+                        document.getElementById('sessionString').value = data.session_string;
+                    }
+
+                    // Переход к шагу 3 через 2 секунды
+                    setTimeout(() => {
+                        document.getElementById('step2').classList.remove('active');
+                        document.getElementById('step3').classList.add('active');
+                    }, 2000);
+                } else {
+                    errorDiv.textContent = data.error || 'Ошибка подтверждения кода';
+                    errorDiv.style.display = 'block';
+                    btn.disabled = false;
+                    btn.textContent = 'Подтвердить';
+                }
+            } catch (e) {
+                errorDiv.textContent = 'Ошибка соединения: ' + e.message;
+                errorDiv.style.display = 'block';
+                btn.disabled = false;
+                btn.textContent = 'Подтвердить';
+            }
+        }
+
+        // Enter для отправки
+        document.getElementById('phoneInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendCode();
+        });
+
+        document.getElementById('codeInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') verifyCode();
+        });
+
+        function copySession() {
+            const textarea = document.getElementById('sessionString');
+            textarea.select();
+            document.execCommand('copy');
+
+            // Меняем текст кнопки
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = '✅ Скопировано!';
+            btn.style.background = '#10b981';
+
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.style.background = '#10b981';
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
