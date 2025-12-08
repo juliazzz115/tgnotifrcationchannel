@@ -21,86 +21,103 @@ class GoogleAIAnalyzer:
         Глубокий анализ диалога с помощью Google AI
         
         Args:
-            messages: список сообщений с полями text, from_me, sender_name
+            messages: список сообщений с полями text, from_me, sender_name, timestamp
             
         Returns:
-            {
-                'manager_introduced': bool,
-                'manager_name': str,
-                'greeting_quality': str,
-                'response_tone': str,
-                'professionalism_score': int,
-                'suggestions': List[str],
-                'key_issues': List[str]
-            }
+            Детальный анализ качества сопровождения клиента
         """
         if not self.api_key:
             logger.warning("Google AI API key не установлен")
             return self._fallback_analysis(messages)
 
-        conversation = self._format_conversation(messages)
+        # Подготовка диалога
+        dialog_json = []
+        for msg in messages:
+            dialog_json.append({
+                "role": "manager" if msg.get('from_me') else "client",
+                "sender": msg.get('sender_name', 'unknown'),
+                "time": msg.get('time', ''),
+                "text": msg.get('text', '')
+            })
         
-        prompt = f"""Ты опытный тренер по клиентскому сервису. Проанализируй диалог между менеджером и клиентом ОБЪЕКТИВНО.
+        # Вычисляем время с последнего сообщения клиента
+        hours_since = 0
+        for msg in reversed(messages):
+            if not msg.get('from_me'):
+                if msg.get('timestamp'):
+                    import time
+                    hours_since = (time.time() - msg['timestamp']) / 3600
+                break
+        
+        input_data = {
+            "dialog": dialog_json,
+            "hours_since_last_client_message": round(hours_since, 1),
+            "managers": ["Владислав", "Егор", "Юлия"],
+            "company_name": "MIA CONSULT GROUP"
+        }
+        
+        prompt = f"""Ты — эксперт по аналитике работы менеджеров по сопровождению ДЕЙСТВУЮЩИХ клиентов и контролю качества сервиса.
 
-Диалог:
-{conversation}
+КОНТЕКСТ:
+Клиент уже является клиентом компании (бухгалтерское обслуживание, регистрация, легализация).
+Задачи менеджеров: отвечать на вопросы, решать проблемы, давать статус, удерживать клиента.
 
-КРИТЕРИИ ОЦЕНКИ ПРОФЕССИОНАЛИЗМА (1-10):
+ВХОДНЫЕ ДАННЫЕ:
+{input_data}
 
-⭐ 9-10 баллов (Отлично):
-- Менеджер представился по имени
-- Есть теплое приветствие
-- Быстрые и полные ответы на все вопросы
-- Проявляет эмпатию и понимание
-- Предлагает конкретные решения
-- Грамотная речь
+ОЦЕНИ:
+1. НАСТРОЕНИЕ КЛИЕНТА:
+   - overall_sentiment: positive/neutral/negative/mixed
+   - sentiment_score: от -1 до 1
+   - client_state: calm/worried/angry/confused/in_a_hurry/unknown
 
-⭐ 7-8 баллов (Хорошо):
-- Представился или есть приветствие
-- Дает развернутые ответы
-- Вежливый тон
-- Отвечает на вопросы клиента
+2. ТИП ЗАПРОСА:
+   - request_type: information_question / status_update / technical_issue / service_complaint / billing_issue / cancellation_or_risk / other
 
-⭐ 5-6 баллов (Средне):
-- Базовая вежливость
-- Отвечает, но не всегда полно
-- Нет представления или приветствия
+3. ПРЕДСТАВЛЕНИЕ МЕНЕДЖЕРА:
+   - Назвал ли имя из списка managers
+   - Качество: none/poor/normal/good
 
-⭐ 3-4 балла (Плохо):
-- Короткие формальные ответы
-- Нет приветствия и представления
-- Игнорирует некоторые вопросы клиента
+4. КАЧЕСТВО РАБОТЫ (1-10):
+   - politeness_score: вежливость, приветствие, уважение
+   - clarity_score: ясность, понятность ответов
+   - proactivity_score: инициатива, предложение решений
+   - professionalism_score: общий уровень
 
-⭐ 1-2 балла (Очень плохо):
-- Грубость или холодность
-- Не отвечает на вопросы
-- Отсутствие базовой вежливости
+ВАЖНО: 
+- Если ответ быстрый (<15 мин) + вежливый = минимум 7 баллов
+- Если ответ >1 часа или игнор вопросов = максимум 4 балла
+- Нет представления - снижает на 1-2 балла, но не делает автоматически плохим
 
-АНАЛИЗИРУЙ:
-1. Представился ли менеджер? (true/false) Какое имя?
-2. Качество приветствия: отличное/хорошее/слабое/отсутствует
-3. Тон общения: дружелюбный/нейтральный/формальный/холодный
-4. Оценка профессионализма (1-10) - СТРОГО по критериям выше
-5. Конкретные рекомендации (3-5 штук) с примерами фраз
-6. Ключевые проблемы диалога
-7. Сильные стороны менеджера
+5. РИСКИ:
+   - risk_level: low/medium/high/critical (риск проблем с клиентом)
+   - churn_risk_level: low/medium/high/critical (риск ухода)
+   - need_urgent_attention: true/false
 
-ВАЖНО: Будь объективным! Если менеджер хорошо работает - ставь 8-10. Если плохо - 1-4.
+6. СТАТУС РЕШЕНИЯ:
+   - resolution_status: resolved/partially_resolved/waiting_for_client/waiting_for_manager/long_term_process/not_resolvable_in_chat/unknown
 
-Формат ответа (ТОЛЬКО JSON):
+Верни ТОЛЬКО JSON (без комментариев):
 {{
-  "manager_introduced": true/false,
-  "manager_name": "имя или null",
-  "greeting_quality": "отличное/хорошее/слабое/отсутствует",
-  "response_tone": "дружелюбный/нейтральный/формальный/холодный",
-  "professionalism_score": 1-10,
-  "suggestions": [
-    "Конкретная рекомендация 1 с примерами фраз",
-    "Конкретная рекомендация 2 с примерами фраз",
-    "Конкретная рекомендация 3 с примерами фраз"
-  ],
-  "key_issues": ["проблема 1", "проблема 2"],
-  "strengths": ["сильная сторона 1", "сильная сторона 2"]
+  "overall_sentiment": "positive",
+  "sentiment_score": 0.5,
+  "client_state": "calm",
+  "request_type": "information_question",
+  "manager_introduced": true,
+  "manager_name": "Владислав",
+  "greeting_quality": "good",
+  "politeness_score": 8,
+  "clarity_score": 7,
+  "proactivity_score": 6,
+  "professionalism_score": 7,
+  "resolution_status": "resolved",
+  "risk_level": "low",
+  "churn_risk_level": "low",
+  "need_urgent_attention": false,
+  "risks": ["риск 1", "риск 2"],
+  "suggestions": ["совет 1", "совет 2", "совет 3"],
+  "strengths": ["сильная сторона 1", "сильная сторона 2"],
+  "key_issues": ["проблема 1"]
 }}"""
 
         try:

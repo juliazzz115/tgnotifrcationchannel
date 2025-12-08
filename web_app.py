@@ -331,7 +331,7 @@ class DialogScanner:
                 if hasattr(entity, 'broadcast') or hasattr(entity, 'megagroup'):
                     continue
 
-                # Только прочитанные диалоги (unread_count == 0)
+                # Только прочитанные диалоги (любое последнее сообщение - от нас или клиента)
                 if dialog.unread_count > 0:
                     continue
 
@@ -411,13 +411,21 @@ class DialogScanner:
                     'total_responses': all_responses_analysis.get('total_responses'),
                     'message_count': manager_analysis.get('message_count'),
                     'politeness_markers': manager_analysis.get('politeness_markers'),
-                    # Google AI анализ
+                    # Google AI анализ (расширенный)
                     'professionalism_score': ai_analysis.get('professionalism_score'),
+                    'politeness_score': ai_analysis.get('politeness_score'),
+                    'clarity_score': ai_analysis.get('clarity_score'),
+                    'proactivity_score': ai_analysis.get('proactivity_score'),
                     'ai_suggestions': ai_analysis.get('suggestions', []),
                     'ai_key_issues': ai_analysis.get('key_issues', []),
                     'ai_strengths': ai_analysis.get('strengths', []),
                     'response_tone': ai_analysis.get('response_tone'),
                     'greeting_quality': ai_analysis.get('greeting_quality'),
+                    'risk_level': ai_analysis.get('risk_level'),
+                    'churn_risk_level': ai_analysis.get('churn_risk_level'),
+                    'resolution_status': ai_analysis.get('resolution_status'),
+                    'overall_sentiment': ai_analysis.get('overall_sentiment'),
+                    'client_state': ai_analysis.get('client_state'),
                     'client_emotion': '😐'
                 })
 
@@ -624,6 +632,65 @@ def get_analytics():
         'dialogs': dialogs_to_analyze,
         'daily_stats': daily_stats
     })
+
+
+@app.route('/api/export_analytics_csv', methods=['GET'])
+def export_analytics_csv():
+    """Экспорт сводной аналитики в CSV для руководства"""
+    dialogs_to_analyze = all_dialogs_for_analytics if all_dialogs_for_analytics else unanswered_dialogs
+    daily_stats = detailed_analyzer.calculate_daily_stats(dialogs_to_analyze)
+    
+    # Сводная таблица
+    summary = {
+        'Дата отчета': datetime.now(LOCAL_TZ).strftime('%d.%m.%Y %H:%M'),
+        'Всего диалогов за день': daily_stats['total_dialogs'],
+        'Среднее время ответа (мин)': daily_stats['avg_response_time_minutes'],
+        'Превышение SLA (>1.5ч)': f"{daily_stats['overtime_count']} ({daily_stats['overtime_percentage']}%)",
+        'Менеджер представился': f"{daily_stats['introduced_percentage']}%",
+        'Приветствие использовано': f"{daily_stats['greeting_percentage']}%"
+    }
+    
+    # Детализация по диалогам
+    rows = []
+    for dialog in dialogs_to_analyze:
+        rows.append({
+            'Имя клиента': dialog.get('name', ''),
+            'Время': dialog.get('time', ''),
+            'Время ответа (мин)': dialog.get('response_delay_working_minutes', ''),
+            'Качество': dialog.get('response_quality', ''),
+            'Представился': 'Да' if dialog.get('introduced') else 'Нет',
+            'Имя менеджера': dialog.get('manager_name', ''),
+            'Приветствие': 'Да' if dialog.get('greeting') else 'Нет',
+            'Оценка AI': dialog.get('professionalism_score', ''),
+            'Тон общения': dialog.get('response_tone', ''),
+            'Всего сообщений клиента': dialog.get('total_client_messages', ''),
+            'Всего ответов менеджера': dialog.get('total_responses', '')
+        })
+    
+    output = StringIO()
+    
+    # Записываем сводку
+    output.write('СВОДКА ЗА ДЕНЬ\n')
+    for key, value in summary.items():
+        output.write(f'{key},{value}\n')
+    output.write('\n\n')
+    
+    # Записываем детализацию
+    if rows:
+        output.write('ДЕТАЛИЗАЦИЯ ПО ДИАЛОГАМ\n')
+        fieldnames = ['Имя клиента', 'Время', 'Время ответа (мин)', 'Качество', 'Представился', 
+                      'Имя менеджера', 'Приветствие', 'Оценка AI', 'Тон общения', 
+                      'Всего сообщений клиента', 'Всего ответов менеджера']
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    
+    csv_data = output.getvalue()
+    return Response(
+        csv_data,
+        mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename=analytics_summary_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'}
+    )
 
 
 @app.route('/api/export_csv', methods=['GET'])
