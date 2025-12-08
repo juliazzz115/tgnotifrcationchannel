@@ -290,11 +290,45 @@ class DialogScanner:
                         # Анализ менеджера
                         'message_count': manager_analysis.get('message_count'),
                         'politeness_markers': manager_analysis.get('politeness_markers'),
-                        # Google AI анализ
+                        # Google AI анализ - расширенные метрики
                         'professionalism_score': ai_analysis.get('professionalism_score'),
+                        'politeness_score': ai_analysis.get('politeness_score'),
+                        'clarity_score': ai_analysis.get('clarity_score'),
+                        'proactivity_score': ai_analysis.get('proactivity_score'),
+                        'responsiveness_score': ai_analysis.get('responsiveness_score'),
+                        'empathy_score': ai_analysis.get('empathy_score'),
+                        # Детали запроса и эмоций
+                        'main_topic': ai_analysis.get('main_topic'),
+                        'urgency_level': ai_analysis.get('urgency_level'),
+                        'emotion_dynamics': ai_analysis.get('emotion_dynamics'),
+                        'client_expectations': ai_analysis.get('client_expectations'),
+                        # Коммуникация
+                        'communication_style': ai_analysis.get('communication_style'),
+                        'used_personalization': ai_analysis.get('used_personalization'),
+                        'first_impression': ai_analysis.get('first_impression'),
+                        # Решение проблемы
+                        'resolution_status': ai_analysis.get('resolution_status'),
+                        'solution_provided': ai_analysis.get('solution_provided'),
+                        'next_steps_clear': ai_analysis.get('next_steps_clear'),
+                        'timeline_given': ai_analysis.get('timeline_given'),
+                        # Риски
+                        'risk_level': ai_analysis.get('risk_level'),
+                        'churn_risk_level': ai_analysis.get('churn_risk_level'),
+                        'need_urgent_attention': ai_analysis.get('need_urgent_attention'),
+                        'escalation_needed': ai_analysis.get('escalation_needed'),
+                        # Детальная информация
+                        'key_moments': ai_analysis.get('key_moments', []),
+                        'critical_phrases': ai_analysis.get('critical_phrases', []),
+                        'missed_opportunities': ai_analysis.get('missed_opportunities', []),
+                        'priority_actions': ai_analysis.get('priority_actions', []),
+                        # Рекомендации и оценки
                         'ai_suggestions': ai_analysis.get('suggestions', []),
                         'ai_key_issues': ai_analysis.get('key_issues', []),
                         'ai_strengths': ai_analysis.get('strengths', []),
+                        'overall_quality': ai_analysis.get('overall_quality'),
+                        'client_satisfaction_estimate': ai_analysis.get('client_satisfaction_estimate'),
+                        'summary': ai_analysis.get('summary'),
+                        # Совместимость со старыми полями
                         'response_tone': ai_analysis.get('response_tone'),
                         'greeting_quality': ai_analysis.get('greeting_quality')
                     })
@@ -411,19 +445,47 @@ class DialogScanner:
                     'total_responses': all_responses_analysis.get('total_responses'),
                     'message_count': manager_analysis.get('message_count'),
                     'politeness_markers': manager_analysis.get('politeness_markers'),
-                    # Google AI анализ (расширенный)
+                    # Google AI анализ - все расширенные поля
                     'professionalism_score': ai_analysis.get('professionalism_score'),
                     'politeness_score': ai_analysis.get('politeness_score'),
                     'clarity_score': ai_analysis.get('clarity_score'),
                     'proactivity_score': ai_analysis.get('proactivity_score'),
+                    'responsiveness_score': ai_analysis.get('responsiveness_score'),
+                    'empathy_score': ai_analysis.get('empathy_score'),
+                    # Детали запроса и эмоций
+                    'main_topic': ai_analysis.get('main_topic'),
+                    'urgency_level': ai_analysis.get('urgency_level'),
+                    'emotion_dynamics': ai_analysis.get('emotion_dynamics'),
+                    'client_expectations': ai_analysis.get('client_expectations'),
+                    # Коммуникация
+                    'communication_style': ai_analysis.get('communication_style'),
+                    'used_personalization': ai_analysis.get('used_personalization'),
+                    'first_impression': ai_analysis.get('first_impression'),
+                    # Решение проблемы
+                    'resolution_status': ai_analysis.get('resolution_status'),
+                    'solution_provided': ai_analysis.get('solution_provided'),
+                    'next_steps_clear': ai_analysis.get('next_steps_clear'),
+                    'timeline_given': ai_analysis.get('timeline_given'),
+                    # Риски
+                    'risk_level': ai_analysis.get('risk_level'),
+                    'churn_risk_level': ai_analysis.get('churn_risk_level'),
+                    'need_urgent_attention': ai_analysis.get('need_urgent_attention'),
+                    'escalation_needed': ai_analysis.get('escalation_needed'),
+                    # Детальная информация
+                    'key_moments': ai_analysis.get('key_moments', []),
+                    'critical_phrases': ai_analysis.get('critical_phrases', []),
+                    'missed_opportunities': ai_analysis.get('missed_opportunities', []),
+                    'priority_actions': ai_analysis.get('priority_actions', []),
+                    # Рекомендации и оценки
                     'ai_suggestions': ai_analysis.get('suggestions', []),
                     'ai_key_issues': ai_analysis.get('key_issues', []),
                     'ai_strengths': ai_analysis.get('strengths', []),
+                    'overall_quality': ai_analysis.get('overall_quality'),
+                    'client_satisfaction_estimate': ai_analysis.get('client_satisfaction_estimate'),
+                    'summary': ai_analysis.get('summary'),
+                    # Совместимость со старыми полями
                     'response_tone': ai_analysis.get('response_tone'),
                     'greeting_quality': ai_analysis.get('greeting_quality'),
-                    'risk_level': ai_analysis.get('risk_level'),
-                    'churn_risk_level': ai_analysis.get('churn_risk_level'),
-                    'resolution_status': ai_analysis.get('resolution_status'),
                     'overall_sentiment': ai_analysis.get('overall_sentiment'),
                     'client_state': ai_analysis.get('client_state'),
                     'client_emotion': '😐'

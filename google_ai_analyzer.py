@@ -59,65 +59,136 @@ class GoogleAIAnalyzer:
         prompt = f"""Ты — эксперт по аналитике работы менеджеров по сопровождению ДЕЙСТВУЮЩИХ клиентов и контролю качества сервиса.
 
 КОНТЕКСТ:
-Клиент уже является клиентом компании (бухгалтерское обслуживание, регистрация, легализация).
-Задачи менеджеров: отвечать на вопросы, решать проблемы, давать статус, удерживать клиента.
+Клиент уже является клиентом компании MIA CONSULT GROUP (бухгалтерское обслуживание, регистрация бизнеса, легализация в Польше).
+Задачи менеджеров: отвечать на вопросы, решать проблемы, давать статус по заявкам, удерживать клиента, предотвращать отток.
 
 ВХОДНЫЕ ДАННЫЕ:
 {input_data}
 
-ОЦЕНИ:
-1. НАСТРОЕНИЕ КЛИЕНТА:
+ПРОВЕДИ ДЕТАЛЬНЫЙ МНОГОУРОВНЕВЫЙ АНАЛИЗ:
+
+1. НАСТРОЕНИЕ И ЭМОЦИИ КЛИЕНТА:
    - overall_sentiment: positive/neutral/negative/mixed
-   - sentiment_score: от -1 до 1
-   - client_state: calm/worried/angry/confused/in_a_hurry/unknown
+   - sentiment_score: от -1.0 (очень негативное) до +1.0 (очень позитивное)
+   - client_state: calm/worried/angry/frustrated/confused/in_a_hurry/satisfied/disappointed/unknown
+   - emotion_dynamics: как менялись эмоции в течение диалога (например: "started_worried_became_calm", "consistently_positive", "escalating_frustration")
 
-2. ТИП ЗАПРОСА:
-   - request_type: information_question / status_update / technical_issue / service_complaint / billing_issue / cancellation_or_risk / other
+2. ТИП И ТЕМА ЗАПРОСА:
+   - request_type: information_question / status_update / technical_issue / service_complaint / billing_issue / cancellation_or_risk / document_request / deadline_pressure / other
+   - main_topic: конкретная тема (например: "статус регистрации компании", "вопрос по счету", "проблема с документами")
+   - urgency_level: low/medium/high/critical
+   - client_expectations: что ожидает клиент (быстрый ответ, конкретные действия, объяснение)
 
-3. ПРЕДСТАВЛЕНИЕ МЕНЕДЖЕРА:
-   - Назвал ли имя из списка managers
-   - Качество: none/poor/normal/good
+3. ПРЕДСТАВЛЕНИЕ И ПЕРВОЕ ВПЕЧАТЛЕНИЕ:
+   - manager_introduced: true/false (назвал ли имя из списка managers)
+   - manager_name: имя или null
+   - greeting_quality: excellent/good/basic/poor/none
+   - first_impression: как менеджер начал диалог (профессионально, формально, тепло, холодно)
 
-4. КАЧЕСТВО РАБОТЫ (1-10):
-   - politeness_score: вежливость, приветствие, уважение
-   - clarity_score: ясность, понятность ответов
-   - proactivity_score: инициатива, предложение решений
-   - professionalism_score: общий уровень
+4. ДЕТАЛЬНАЯ ОЦЕНКА КАЧЕСТВА РАБОТЫ МЕНЕДЖЕРА (каждый параметр 1-10):
+   - politeness_score: вежливость, уважение, тон, использование приветствий и благодарностей
+   - clarity_score: ясность и понятность ответов, структурированность информации
+   - proactivity_score: инициатива, предложение решений, предвосхищение вопросов
+   - responsiveness_score: скорость реакции, готовность помочь
+   - empathy_score: эмпатия, понимание ситуации клиента, эмоциональный интеллект
+   - professionalism_score: общий профессионализм, компетентность
 
-ВАЖНО: 
-- Если ответ быстрый (<15 мин) + вежливый = минимум 7 баллов
-- Если ответ >1 часа или игнор вопросов = максимум 4 балла
-- Нет представления - снижает на 1-2 балла, но не делает автоматически плохим
+ОБЪЕКТИВНЫЕ КРИТЕРИИ ОЦЕНКИ:
+- Ответ <15 минут + вежливое обращение = минимум 7-8 баллов
+- Ответ через 30-60 минут = 5-6 баллов (если качественный)
+- Ответ >1 часа или игнорирование вопросов = максимум 3-4 балла
+- Грубость, формализм, отписки = снижение на 2-3 балла
+- Нет представления = -1 балл к professionalism_score, но не критично
+- Решение проблемы клиента = +1-2 балла ко всем показателям
 
-5. РИСКИ:
+5. КОММУНИКАЦИЯ И СТИЛЬ:
+   - communication_style: friendly/professional/formal/cold/warm/casual
+   - used_personalization: использовал ли персонализацию (обращение по имени клиента)
+   - tone_consistency: последовательность тона на протяжении диалога
+   - language_quality: грамотность, отсутствие ошибок
+
+6. АНАЛИЗ РЕШЕНИЯ ПРОБЛЕМЫ:
+   - resolution_status: resolved/partially_resolved/in_progress/waiting_for_client/waiting_for_manager/long_term_process/not_resolvable_in_chat/ignored/unknown
+   - solution_provided: предложено ли конкретное решение (true/false)
+   - next_steps_clear: понятны ли следующие шаги клиенту (true/false)
+   - timeline_given: указаны ли сроки выполнения (true/false)
+   - follow_up_planned: запланирован ли follow-up (true/false)
+
+7. РИСКИ И ПРЕДУПРЕЖДЕНИЯ:
    - risk_level: low/medium/high/critical (риск проблем с клиентом)
-   - churn_risk_level: low/medium/high/critical (риск ухода)
-   - need_urgent_attention: true/false
+   - churn_risk_level: low/medium/high/critical (риск ухода клиента)
+   - need_urgent_attention: требуется ли срочное внимание руководителя (true/false)
+   - escalation_needed: нужна ли эскалация вопроса (true/false)
+   - risks: массив конкретных рисков (например: ["клиент ждет ответ >24 часа", "недовольство качеством", "угроза расторжения"])
 
-6. СТАТУС РЕШЕНИЯ:
-   - resolution_status: resolved/partially_resolved/waiting_for_client/waiting_for_manager/long_term_process/not_resolvable_in_chat/unknown
+8. КЛЮЧЕВЫЕ МОМЕНТЫ ДИАЛОГА:
+   - key_moments: важные моменты диалога (например: ["клиент выразил недовольство задержкой", "менеджер пообещал решить до конца дня"])
+   - critical_phrases: критические фразы клиента или менеджера
+   - turning_points: переломные моменты (положительные или отрицательные)
 
-Верни ТОЛЬКО JSON (без комментариев):
+9. СИЛЬНЫЕ СТОРОНЫ:
+   - strengths: массив сильных сторон работы менеджера (минимум 2-3 пункта, даже если есть проблемы)
+
+10. ПРОБЛЕМЫ И НЕДОЧЕТЫ:
+   - key_issues: массив конкретных проблем (например: ["нет представления", "слишком формальный тон", "не указаны сроки"])
+   - missed_opportunities: упущенные возможности улучшить сервис
+
+11. ДЕТАЛЬНЫЕ РЕКОМЕНДАЦИИ:
+   - suggestions: массив конкретных, практических рекомендаций (минимум 3-5 пунктов)
+   - priority_actions: приоритетные действия (что сделать в первую очередь)
+   - training_needs: какое обучение может потребоваться менеджеру
+
+12. ОБЩАЯ ОЦЕНКА И ВЫВОДЫ:
+   - overall_quality: excellent/good/satisfactory/poor/critical
+   - client_satisfaction_estimate: оценка удовлетворенности клиента (1-10)
+   - summary: краткое резюме диалога (1-2 предложения)
+
+Верни ТОЛЬКО JSON (без комментариев, без markdown):
 {{
   "overall_sentiment": "positive",
-  "sentiment_score": 0.5,
+  "sentiment_score": 0.7,
   "client_state": "calm",
-  "request_type": "information_question",
+  "emotion_dynamics": "consistently_positive",
+  "request_type": "status_update",
+  "main_topic": "статус регистрации компании",
+  "urgency_level": "medium",
+  "client_expectations": "получить конкретные сроки",
   "manager_introduced": true,
   "manager_name": "Владислав",
   "greeting_quality": "good",
+  "first_impression": "профессионально и тепло",
   "politeness_score": 8,
   "clarity_score": 7,
   "proactivity_score": 6,
+  "responsiveness_score": 8,
+  "empathy_score": 7,
   "professionalism_score": 7,
+  "communication_style": "friendly",
+  "used_personalization": true,
+  "tone_consistency": "последовательный",
+  "language_quality": "отличное",
   "resolution_status": "resolved",
+  "solution_provided": true,
+  "next_steps_clear": true,
+  "timeline_given": true,
+  "follow_up_planned": false,
   "risk_level": "low",
   "churn_risk_level": "low",
   "need_urgent_attention": false,
-  "risks": ["риск 1", "риск 2"],
-  "suggestions": ["совет 1", "совет 2", "совет 3"],
-  "strengths": ["сильная сторона 1", "сильная сторона 2"],
-  "key_issues": ["проблема 1"]
+  "escalation_needed": false,
+  "risks": [],
+  "key_moments": ["менеджер оперативно дал статус", "клиент поблагодарил за информацию"],
+  "critical_phrases": [],
+  "turning_points": [],
+  "strengths": ["быстрый ответ", "четкая информация", "вежливое обращение"],
+  "key_issues": [],
+  "missed_opportunities": ["можно было предложить дополнительную консультацию"],
+  "suggestions": ["продолжать в том же духе", "можно добавить больше эмпатии", "предлагать дополнительную помощь проактивно"],
+  "priority_actions": [],
+  "training_needs": [],
+  "overall_quality": "good",
+  "client_satisfaction_estimate": 8,
+  "summary": "Качественный диалог с быстрым решением вопроса клиента"
 }}"""
 
         try:
@@ -133,7 +204,7 @@ class GoogleAIAnalyzer:
                     }],
                     "generationConfig": {
                         "temperature": 0.3,
-                        "maxOutputTokens": 1024
+                        "maxOutputTokens": 2048
                     }
                 },
                 timeout=10
@@ -225,14 +296,53 @@ class GoogleAIAnalyzer:
             suggestions.append("Продолжайте работать в том же духе")
         
         return {
+            # Основные поля
             'manager_introduced': introduction['introduced'],
             'manager_name': introduction['manager_name'],
-            'greeting_quality': 'хорошее' if has_greeting else 'отсутствует',
-            'response_tone': 'нейтральный',
+            'greeting_quality': 'good' if has_greeting else 'none',
+            'response_tone': 'neutral',
             'professionalism_score': score,
             'suggestions': suggestions,
             'key_issues': key_issues,
-            'strengths': strengths
+            'strengths': strengths,
+            # Расширенные поля для совместимости
+            'overall_sentiment': 'neutral',
+            'sentiment_score': 0.0,
+            'client_state': 'unknown',
+            'emotion_dynamics': 'unknown',
+            'request_type': 'other',
+            'main_topic': 'не определено',
+            'urgency_level': 'medium',
+            'client_expectations': 'не определено',
+            'first_impression': 'нейтральное',
+            'politeness_score': score,
+            'clarity_score': score,
+            'proactivity_score': score,
+            'responsiveness_score': score,
+            'empathy_score': score,
+            'communication_style': 'professional',
+            'used_personalization': False,
+            'tone_consistency': 'последовательный',
+            'language_quality': 'нормальное',
+            'resolution_status': 'unknown',
+            'solution_provided': False,
+            'next_steps_clear': False,
+            'timeline_given': False,
+            'follow_up_planned': False,
+            'risk_level': 'medium',
+            'churn_risk_level': 'low',
+            'need_urgent_attention': False,
+            'escalation_needed': False,
+            'risks': [],
+            'key_moments': [],
+            'critical_phrases': [],
+            'turning_points': [],
+            'missed_opportunities': [],
+            'priority_actions': [],
+            'training_needs': [],
+            'overall_quality': 'satisfactory',
+            'client_satisfaction_estimate': score,
+            'summary': 'Базовый анализ (Google AI недоступен)'
         }
 
 
