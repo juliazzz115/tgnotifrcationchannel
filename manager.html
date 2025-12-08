@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Система управления диалогами</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .header {
+            background: white;
+            border-bottom: 1px solid #e1e8ed;
+            padding: 20px 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 600;
+            color: #0066cc;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .nav-tab {
+            padding: 10px 20px;
+            background: white;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #657786;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .nav-tab:hover {
+            border-color: #0066cc;
+            color: #0066cc;
+        }
+
+        .nav-tab.active {
+            background: #0066cc;
+            color: white;
+            border-color: #0066cc;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: #657786;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #17bf63;
+        }
+
+        .status-dot.offline {
+            background: #e0245e;
+        }
+
+        .stats {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 24px 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 16px;
+            border-radius: 8px;
+            background: #f5f7fa;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-item.new .stat-value { color: #e0245e; }
+        .stat-item.task .stat-value { color: #17bf63; }
+        .stat-item.done .stat-value { color: #657786; }
+
+        .stat-label {
+            font-size: 14px;
+            color: #657786;
+            font-weight: 500;
+        }
+
+        .filters {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .filter-btn {
+            padding: 8px 16px;
+            border: 1px solid #e1e8ed;
+            background: white;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #657786;
+            transition: all 0.2s;
+        }
+
+        .filter-btn:hover {
+            background: #f5f7fa;
+            border-color: #0066cc;
+        }
+
+        .filter-btn.active {
+            background: #0066cc;
+            color: white;
+            border-color: #0066cc;
+        }
+
+        .btn-export {
+            padding: 10px 20px;
+            background: #17bf63;
+            margin-left: auto;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-export:hover {
+            background: #12a557;
+        }
+
+        .dialog-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            border-left: 4px solid #e1e8ed;
+            transition: all 0.2s;
+        }
+
+        .dialog-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+
+        .dialog-card.new {
+            border-left-color: #e0245e;
+        }
+
+        .dialog-card.task {
+            border-left-color: #17bf63;
+        }
+
+        .dialog-card.done {
+            border-left-color: #657786;
+            opacity: 0.7;
+        }
+
+        .dialog-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #f5f7fa;
+        }
+
+        .dialog-title-group {
+            flex: 1;
+        }
+
+        .dialog-name {
+            font-size: 20px;
+            font-weight: 600;
+            color: #14171a;
+            margin-bottom: 8px;
+        }
+
+        .dialog-meta {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge.status {
+            background: #f5f7fa;
+            color: #657786;
+        }
+
+        .badge.new { background: #ffe5ec; color: #e0245e; }
+        .badge.task { background: #e8f5e9; color: #17bf63; }
+        .badge.done { background: #f5f7fa; color: #657786; }
+
+        .badge.manager {
+            background: #e1f0ff;
+            color: #0066cc;
+        }
+
+        .dialog-time-info {
+            text-align: right;
+        }
+
+        .dialog-date {
+            font-size: 14px;
+            color: #657786;
+            margin-bottom: 4px;
+        }
+
+        .time-ago {
+            font-size: 13px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            background: #fff9e6;
+            color: #b87600;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .time-ago.urgent {
+            background: #ffe5ec;
+            color: #e0245e;
+        }
+
+        .messages-history {
+            background: #f5f7fa;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+
+        .messages-history-title {
+            font-size: 13px;
+            color: #657786;
+            font-weight: 600;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .message-item {
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            background: white;
+            border-left: 3px solid #e1e8ed;
+        }
+
+        .message-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .message-item.from-me {
+            border-left-color: #0066cc;
+            background: #f0f7ff;
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .message-sender {
+            font-size: 13px;
+            font-weight: 600;
+            color: #14171a;
+        }
+
+        .message-time {
+            font-size: 12px;
+            color: #657786;
+        }
+
+        .message-text {
+            font-size: 14px;
+            color: #14171a;
+            line-height: 1.5;
+        }
+
+        .dialog-note {
+            background: #fff9e6;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 16px 0;
+            border-left: 3px solid #ffda44;
+        }
+
+        .dialog-note strong {
+            color: #b87600;
+            font-size: 13px;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        /* 🤖 AI Анализ */
+        .analysis-block {
+            background: #f0f7ff;
+            border: 1px solid #d6e9ff;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+
+        .analysis-header {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .analysis-emotion {
+            font-size: 16px;
+            font-weight: 600;
+            padding: 6px 12px;
+            background: white;
+            border-radius: 20px;
+            border: 1px solid #d6e9ff;
+        }
+
+        .analysis-intro {
+            font-size: 13px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 20px;
+        }
+
+        .analysis-intro.intro-yes {
+            background: #e8f5e9;
+            color: #17bf63;
+            border: 1px solid #c8e6c9;
+        }
+
+        .analysis-intro.intro-no {
+            background: #ffe5ec;
+            color: #e0245e;
+            border: 1px solid #ffcdd2;
+        }
+
+        .analysis-warnings {
+            background: #fff9e6;
+            border-left: 3px solid #ffda44;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+
+        .warning-item {
+            font-size: 14px;
+            color: #b87600;
+            font-weight: 600;
+            margin: 4px 0;
+        }
+
+        .analysis-recommendations {
+            background: white;
+            border: 1px solid #d6e9ff;
+            padding: 12px;
+            border-radius: 6px;
+        }
+
+        .rec-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #0066cc;
+            margin-bottom: 8px;
+        }
+
+        .rec-item {
+            font-size: 13px;
+            color: #14171a;
+            margin: 4px 0;
+            padding-left: 8px;
+        }
+
+        /* Критичные диалоги */
+        .dialog-card.critical {
+            border-left: 4px solid #e0245e !important;
+            animation: pulse-critical 2s infinite;
+        }
+
+        @keyframes pulse-critical {
+            0%, 100% { box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+            50% { box-shadow: 0 4px 16px rgba(224, 36, 94, 0.25); }
+        }
+
+        .dialog-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-top: 20px;
+        }
+
+        .action-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #657786;
+            margin-bottom: 8px;
+        }
+
+        .action-group select,
+        .action-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .action-group textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .action-buttons {
+            grid-column: 1 / -1;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            flex: 1;
+            min-width: 140px;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .btn-chat {
+            background: #0066cc;
+            color: white;
+        }
+
+        .btn-chat:hover {
+            background: #0052a3;
+        }
+
+        .btn-task {
+            background: #17bf63;
+            color: white;
+        }
+
+        .btn-task:hover {
+            background: #12a557;
+        }
+
+        .btn-done {
+            background: #657786;
+            color: white;
+        }
+
+        .btn-done:hover {
+            background: #53626e;
+        }
+
+        .no-dialogs {
+            text-align: center;
+            padding: 60px 20px;
+            color: #657786;
+            font-size: 16px;
+        }
+
+        @media (max-width: 768px) {
+            .dialog-header {
+                flex-direction: column;
+            }
+
+            .dialog-time-info {
+                text-align: left;
+                margin-top: 12px;
+            }
+
+            .dialog-actions {
+                grid-template-columns: 1fr;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">📊 Менеджер Диалогов</div>
+                <div class="nav-tabs">
+                    <a href="/manager" class="nav-tab active">Диалоги</a>
+                    <a href="/analytics" class="nav-tab">Аналитика</a>
+                    <a href="/messages" class="nav-tab">Уведомления</a>
+                </div>
+                <div class="status">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span id="connection-status">Подключение...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Статистика -->
+        <div class="stats">
+            <div class="stats-grid">
+                <div class="stat-item new">
+                    <div class="stat-value" id="stat-new">0</div>
+                    <div class="stat-label">Новые</div>
+                </div>
+                <div class="stat-item task">
+                    <div class="stat-value" id="stat-task">0</div>
+                    <div class="stat-label">Задачи</div>
+                </div>
+                <div class="stat-item done">
+                    <div class="stat-value" id="stat-done">0</div>
+                    <div class="stat-label">Решено</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Фильтры -->
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">Все</button>
+            <button class="filter-btn" data-filter="new">Новые</button>
+            <button class="filter-btn" data-filter="task">Задачи</button>
+            <button class="filter-btn" data-filter="done">Решено</button>
+
+            <button class="btn-export" onclick="exportCSV()">📥 Экспорт CSV</button>
+        </div>
+
+        <!-- Диалоги -->
+        <div id="dialogs">
+            <div class="no-dialogs">Загрузка диалогов...</div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io({
+            transports: ['websocket', 'polling'],
+            reconnection: true
+        });
+
+        let allDialogs = [];
+        let currentFilter = 'all';
+        const managers = {{ managers|tojson }};
+
+        // Подключение
+        socket.on('connect', () => {
+            console.log('✅ Подключено');
+            document.getElementById('connection-status').textContent = 'Онлайн';
+            document.getElementById('status-dot').classList.remove('offline');
+            loadDialogs();
+        });
+
+        socket.on('disconnect', () => {
+            console.log('❌ Отключено');
+            document.getElementById('connection-status').textContent = 'Офлайн';
+            document.getElementById('status-dot').classList.add('offline');
+        });
+
+        // Обновление диалогов
+        socket.on('dialogs_update', (data) => {
+            console.log('📥 Получены диалоги:', data);
+            allDialogs = data.dialogs;
+            renderDialogs();
+        });
+
+        // Новый неотвеченный
+        socket.on('new_unanswered', (data) => {
+            console.log('🔔 НОВЫЙ НЕОТВЕЧЕННЫЙ!', data);
+            playAlertSound();
+            loadDialogs();
+        });
+
+        // Изменение статуса
+        socket.on('status_changed', (data) => {
+            console.log('🔄 Статус изменен:', data);
+            const dialog = allDialogs.find(d => String(d.id) === String(data.dialog_id));
+            if (dialog) {
+                dialog.status = data.status;
+                dialog.manager = data.manager;
+                dialog.note = data.note;
+                renderDialogs();
+            }
+        });
+
+        // Загрузка диалогов
+        async function loadDialogs() {
+            try {
+                const response = await fetch('/api/dialogs');
+                const data = await response.json();
+                allDialogs = data.dialogs;
+                renderDialogs();
+            } catch (e) {
+                console.error('Ошибка загрузки:', e);
+            }
+        }
+
+        // Отрисовка
+        function renderDialogs() {
+            const container = document.getElementById('dialogs');
+
+            // Фильтрация по статусу
+            let filtered = allDialogs;
+            if (currentFilter !== 'all') {
+                filtered = allDialogs.filter(d => d.status === currentFilter);
+            }
+
+            // Статистика
+            document.getElementById('stat-new').textContent = allDialogs.filter(d => d.status === 'new').length;
+            document.getElementById('stat-task').textContent = allDialogs.filter(d => d.status === 'task').length;
+            document.getElementById('stat-done').textContent = allDialogs.filter(d => d.status === 'done').length;
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="no-dialogs">Нет диалогов</div>';
+                return;
+            }
+
+            let html = '';
+            filtered.forEach(dialog => {
+                const urgentClass = dialog.hours_ago > 2 ? 'urgent' : '';
+                const statusText = {
+                    'new': 'Новый',
+                    'task': 'Задача',
+                    'done': 'Решено'
+                }[dialog.status] || dialog.status;
+
+                // История сообщений
+                let messagesHtml = '';
+                if (dialog.messages && dialog.messages.length > 0) {
+                    messagesHtml = '<div class="messages-history"><div class="messages-history-title">Последние сообщения</div>';
+                    dialog.messages.forEach(msg => {
+                        const msgClass = msg.from_me ? 'from-me' : '';
+                        messagesHtml += `
+                            <div class="message-item ${msgClass}">
+                                <div class="message-header">
+                                    <span class="message-sender">${escapeHtml(msg.sender_name)}</span>
+                                    <span class="message-time">${msg.time}</span>
+                                </div>
+                                <div class="message-text">${escapeHtml(msg.text)}</div>
+                            </div>
+                        `;
+                    });
+                    messagesHtml += '</div>';
+                }
+
+                // 🤖 Блок AI анализа
+                let analysisHtml = '';
+                if (dialog.client_emotion || dialog.warnings || dialog.recommendations) {
+                    analysisHtml = '<div class="analysis-block">';
+
+                    // Верхняя строка: настроение + представление
+                    analysisHtml += '<div class="analysis-header">';
+                    if (dialog.client_emotion) {
+                        analysisHtml += `<span class="analysis-emotion">${dialog.client_emotion}</span>`;
+                    }
+                    if (dialog.introduced !== undefined) {
+                        const introIcon = dialog.introduced ? '✅' : '❌';
+                        const introText = dialog.introduced
+                            ? `Представился: ${dialog.manager_name || 'да'}`
+                            : 'Не представился';
+                        const introClass = dialog.introduced ? 'intro-yes' : 'intro-no';
+                        analysisHtml += `<span class="analysis-intro ${introClass}">${introIcon} ${introText}</span>`;
+                    }
+                    analysisHtml += '</div>';
+
+                    // Предупреждения
+                    if (dialog.warnings && dialog.warnings.length > 0) {
+                        analysisHtml += '<div class="analysis-warnings">';
+                        dialog.warnings.forEach(warning => {
+                            analysisHtml += `<div class="warning-item">${warning}</div>`;
+                        });
+                        analysisHtml += '</div>';
+                    }
+
+                    // Рекомендации
+                    if (dialog.recommendations && dialog.recommendations.length > 0) {
+                        analysisHtml += '<div class="analysis-recommendations">';
+                        analysisHtml += '<div class="rec-title">💡 Рекомендации:</div>';
+                        dialog.recommendations.forEach(rec => {
+                            analysisHtml += `<div class="rec-item">• ${rec}</div>`;
+                        });
+                        analysisHtml += '</div>';
+                    }
+
+                    analysisHtml += '</div>';
+                }
+
+                const criticalClass = dialog.is_critical ? 'critical' : '';
+
+                html += `
+                    <div class="dialog-card ${dialog.status} ${criticalClass}">
+                        <div class="dialog-header">
+                            <div class="dialog-title-group">
+                                <div class="dialog-name">${escapeHtml(dialog.name)}</div>
+                                <div class="dialog-meta">
+                                    <span class="badge ${dialog.status}">${statusText}</span>
+                                    ${dialog.manager ? `<span class="badge manager">👤 ${escapeHtml(dialog.manager)}</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="dialog-time-info">
+                                <div class="dialog-date">${dialog.time} | ${dialog.date}</div>
+                                <div class="time-ago ${urgentClass}">⏱️ ${dialog.hours_ago}ч без ответа</div>
+                            </div>
+                        </div>
+
+                        ${messagesHtml}
+
+                        ${analysisHtml}
+
+                        ${dialog.note ? `<div class="dialog-note"><strong>📝 Заметка:</strong>${escapeHtml(dialog.note)}</div>` : ''}
+
+                        <div class="dialog-actions">
+                            <div class="action-group">
+                                <label>Ответственный</label>
+                                <select id="manager-${dialog.id}">
+                                    <option value="">Не назначен</option>
+                                    ${managers.map(m => `<option value="${m}" ${dialog.manager === m ? 'selected' : ''}>${m}</option>`).join('')}
+                                </select>
+                            </div>
+
+                            <div class="action-group">
+                                <label>Заметка</label>
+                                <textarea id="note-${dialog.id}" placeholder="Добавить комментарий...">${dialog.note || ''}</textarea>
+                            </div>
+
+                            <div class="action-buttons">
+                                <button class="btn btn-chat" onclick="openChat('${dialog.chat_link}')">💬 Открыть чат</button>
+                                ${dialog.status !== 'task' ? `<button class="btn btn-task" onclick="setTask(${dialog.id})">🟢 Поставить задачу</button>` : ''}
+                                ${dialog.status !== 'done' ? `<button class="btn btn-done" onclick="updateStatus(${dialog.id}, 'done')">✅ Решено</button>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Обновление статуса
+        async function updateStatus(dialogId, status) {
+            const manager = document.getElementById(`manager-${dialogId}`).value;
+            const note = document.getElementById(`note-${dialogId}`).value;
+
+            try {
+                await fetch('/api/update_status', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        dialog_id: dialogId,
+                        status: status,
+                        manager: manager,
+                        note: note
+                    })
+                });
+            } catch (e) {
+                console.error('Ошибка:', e);
+                alert('Ошибка обновления статуса');
+            }
+        }
+
+        function setTask(dialogId) {
+            updateStatus(dialogId, 'task');
+            window.open('https://crm.local/addtask', '_blank');
+        }
+
+        function openChat(link) {
+            window.open(link, '_blank');
+        }
+
+        function exportCSV() {
+            window.open('/api/export_csv', '_blank');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Фильтры
+        document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter = btn.dataset.filter;
+                renderDialogs();
+            });
+        });
+
+        // Звук
+        let alertSound = null;
+        try {
+            alertSound = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.log('Звук недоступен');
+        }
+
+        function playAlertSound() {
+            if (!alertSound) return;
+
+            function beep(freq, dur, vol) {
+                const osc = alertSound.createOscillator();
+                const gain = alertSound.createGain();
+                osc.connect(gain);
+                gain.connect(alertSound.destination);
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(vol, alertSound.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, alertSound.currentTime + dur);
+                osc.start(alertSound.currentTime);
+                osc.stop(alertSound.currentTime + dur);
+            }
+
+            beep(1200, 0.3, 0.5);
+            setTimeout(() => beep(800, 0.3, 0.5), 300);
+        }
+
+        loadDialogs();
+    </script>
+</body>
+</html>

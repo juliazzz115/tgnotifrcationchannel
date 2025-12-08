@@ -9,7 +9,7 @@ import json
 import pytz
 from datetime import datetime, time, timezone
 from threading import Thread
-from flask import Flask, render_template, request, jsonify, Response
+from flask import Flask, render_template, request, jsonify, Response, redirect
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import csv
@@ -19,8 +19,13 @@ from telethon import TelegramClient
 from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError
 from sentiment_analyzer import analyzer as sentiment_analyzer
+from detailed_analyzer import detailed_analyzer
+from google_ai_analyzer import google_ai_analyzer
 
 load_dotenv()
+
+GOOGLE_AI_KEY = os.getenv('GOOGLE_AI_KEY', 'AIzaSyBoYgQMK5cydwDThxovjsRdyUEgcIIu2_g')
+google_ai_analyzer.api_key = GOOGLE_AI_KEY
 
 # ЛОГИРОВАНИЕ
 logging.basicConfig(
@@ -172,10 +177,10 @@ class DialogScanner:
                     if hours_ago < 1.0:
                         continue
 
-                    # Получаем последние 3 сообщения для контекста
+                    # Получаем последние 10 сообщений для детального анализа
                     recent_messages = []
                     try:
-                        async for msg in self.client.iter_messages(entity, limit=3):
+                        async for msg in self.client.iter_messages(entity, limit=10):
                             msg_sender = await msg.get_sender()
                             is_from_me = msg_sender and msg_sender.id == me.id if msg_sender else False
 
@@ -183,7 +188,8 @@ class DialogScanner:
                                 'text': msg.message or '[нет текста]',
                                 'time': msg.date.astimezone(LOCAL_TZ).strftime('%H:%M'),
                                 'from_me': is_from_me,
-                                'sender_name': 'Вы' if is_from_me else name
+                                'sender_name': 'Вы' if is_from_me else name,
+                                'timestamp': msg.date.timestamp()
                             })
 
                         # Разворачиваем чтобы старые были первыми
@@ -194,7 +200,8 @@ class DialogScanner:
                             'text': last_msg.message or '[нет текста]',
                             'time': local_time.strftime('%H:%M'),
                             'from_me': False,
-                            'sender_name': name
+                            'sender_name': name,
+                            'timestamp': last_msg.date.timestamp()
                         }]
 
                     # Формируем ссылку на чат
@@ -204,31 +211,57 @@ class DialogScanner:
                     else:
                         chat_link = f"tg://openmessage?user_id={entity.id}"
 
-                    # 🤖 AI АНАЛИЗ ДИАЛОГА
+                    # 🤖 БАЗОВЫЙ AI АНАЛИЗ
                     analysis = sentiment_analyzer.analyze_dialog(recent_messages, hours_ago)
+                    
+                    # 📊 ДЕТАЛЬНЫЙ АНАЛИЗ ВРЕМЕНИ ОТВЕТА
+                    response_analysis = detailed_analyzer.analyze_response_times(recent_messages)
+                    
+                    # 👤 АНАЛИЗ ПОВЕДЕНИЯ МЕНЕДЖЕРА
+                    manager_analysis = detailed_analyzer.analyze_manager_behavior(recent_messages)
+                    
+                    # 🤖 GOOGLE AI АНАЛИЗ (асинхронно, но не блокируем)
+                    ai_analysis = {}
+                    try:
+                        ai_analysis = google_ai_analyzer.analyze_dialog_with_ai(recent_messages[:5])
+                    except Exception as e:
+                        logger.warning(f"Google AI анализ не удался: {e}")
 
                     unanswered.append({
                         'id': entity.id,
                         'name': name,
                         'time': local_time.strftime('%H:%M'),
                         'date': local_time.strftime('%d.%m.%Y'),
-                        'text': (last_msg.message or '[нет текста]').strip()[:200],  # Последнее сообщение
-                        'messages': recent_messages,  # История последних 3
+                        'text': (last_msg.message or '[нет текста]').strip()[:200],
+                        'messages': recent_messages[:3],
                         'hours_ago': round(hours_ago, 1),
                         'chat_link': chat_link,
                         'timestamp': last_msg.date.timestamp(),
-                        # Данные анализа
+                        # Базовый анализ
                         'sentiment': analysis['sentiment'],
                         'sentiment_score': analysis['sentiment_score'],
                         'client_emotion': analysis['client_emotion'],
                         'urgency': analysis['urgency'],
                         'issues': analysis['issues'],
-                        'introduced': analysis['introduced'],
-                        'manager_name': analysis['manager_name'],
-                        'greeting': analysis['greeting'],
                         'is_critical': analysis['is_critical'],
                         'warnings': analysis['warnings'],
-                        'recommendations': analysis['recommendations']
+                        'recommendations': analysis['recommendations'],
+                        # Детальный анализ времени
+                        'response_delay_minutes': response_analysis.get('response_delay_minutes'),
+                        'response_delay_hours': response_analysis.get('response_delay_hours'),
+                        'response_quality': response_analysis.get('response_quality'),
+                        'is_overtime': response_analysis.get('is_overtime'),
+                        # Анализ менеджера
+                        'introduced': manager_analysis.get('introduced'),
+                        'manager_name': manager_analysis.get('manager_name'),
+                        'greeting': manager_analysis.get('used_greeting'),
+                        'message_count': manager_analysis.get('message_count'),
+                        'politeness_markers': manager_analysis.get('politeness_markers'),
+                        # Google AI анализ
+                        'professionalism_score': ai_analysis.get('professionalism_score'),
+                        'ai_suggestions': ai_analysis.get('suggestions', []),
+                        'response_tone': ai_analysis.get('response_tone'),
+                        'greeting_quality': ai_analysis.get('greeting_quality')
                     })
 
             logger.info(f"📊 Найдено неотвеченных диалогов: {len(unanswered)}")
@@ -337,10 +370,34 @@ def run_scanner():
 
 @app.route('/')
 def index():
-    """Главная страница - система для менеджеров"""
+    """Главная страница - перенаправление на manager"""
+    if not session_exists:
+        return redirect('/setup')
+    return redirect('/manager')
+
+
+@app.route('/manager')
+def manager():
+    """Страница менеджера диалогов"""
     if not session_exists:
         return redirect('/setup')
     return render_template('manager.html', managers=MANAGERS)
+
+
+@app.route('/analytics')
+def analytics():
+    """Страница аналитики"""
+    if not session_exists:
+        return redirect('/setup')
+    return render_template('analytics.html')
+
+
+@app.route('/messages')
+def messages():
+    """Страница уведомлений"""
+    if not session_exists:
+        return redirect('/setup')
+    return render_template('messages.html')
 
 
 @app.route('/setup')
@@ -403,6 +460,33 @@ def update_status():
     })
 
     return jsonify({'success': True})
+
+
+@app.route('/api/analytics', methods=['GET'])
+def get_analytics():
+    """Получить аналитику по диалогам"""
+    statuses = load_statuses()
+
+    # Обогащаем диалоги статусами
+    enriched_dialogs = []
+    for dialog in unanswered_dialogs:
+        dialog_id = str(dialog['id'])
+        enriched = dialog.copy()
+        if dialog_id in statuses:
+            enriched.update(statuses[dialog_id])
+        else:
+            enriched['status'] = 'new'
+            enriched['manager'] = ''
+            enriched['note'] = ''
+        enriched_dialogs.append(enriched)
+
+    # Расчет общей статистики за день
+    daily_stats = detailed_analyzer.calculate_daily_stats(enriched_dialogs)
+
+    return jsonify({
+        'dialogs': enriched_dialogs,
+        'daily_stats': daily_stats
+    })
 
 
 @app.route('/api/export_csv', methods=['GET'])
