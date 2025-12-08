@@ -547,6 +547,77 @@
                                     <span style="font-size: 14px; font-weight: 600;">${dialog.proactivity_score}/10</span>
                                 </div>
                                 ` : ''}
+                                ${dialog.responsiveness_score ? `
+                                <div>
+                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Скорость реакции:</span>
+                                    <span style="font-size: 14px; font-weight: 600;">${dialog.responsiveness_score}/10</span>
+                                </div>
+                                ` : ''}
+                                ${dialog.empathy_score ? `
+                                <div>
+                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Эмпатия:</span>
+                                    <span style="font-size: 14px; font-weight: 600;">${dialog.empathy_score}/10</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+
+                        ${dialog.main_topic || dialog.urgency_level || dialog.emotion_dynamics ? `
+                            <div style="margin-top: 12px; padding: 12px; background: #fefce8; border-radius: 6px; border-left: 3px solid #eab308;">
+                                ${dialog.main_topic ? `
+                                <div style="font-size: 13px; margin-bottom: 6px;">
+                                    <span style="color: #657786; font-weight: 600;">Тема запроса:</span>
+                                    <span style="color: #14171a;">${dialog.main_topic}</span>
+                                </div>
+                                ` : ''}
+                                ${dialog.urgency_level ? `
+                                <div style="font-size: 13px; margin-bottom: 6px;">
+                                    <span style="color: #657786; font-weight: 600;">Срочность:</span>
+                                    <span style="color: #14171a;">${dialog.urgency_level === 'critical' ? '🔴 критическая' : dialog.urgency_level === 'high' ? '🟠 высокая' : dialog.urgency_level === 'medium' ? '🟡 средняя' : '🟢 низкая'}</span>
+                                </div>
+                                ` : ''}
+                                ${dialog.emotion_dynamics ? `
+                                <div style="font-size: 13px;">
+                                    <span style="color: #657786; font-weight: 600;">Динамика эмоций:</span>
+                                    <span style="color: #14171a;">${dialog.emotion_dynamics}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+
+                        ${dialog.key_moments && dialog.key_moments.length > 0 ? `
+                            <div style="margin-top: 12px; padding: 12px; background: #f0f9ff; border-radius: 6px; border-left: 3px solid #0284c7;">
+                                <div style="font-size: 13px; color: #0284c7; font-weight: 600; margin-bottom: 8px;">
+                                    📌 Ключевые моменты:
+                                </div>
+                                ${dialog.key_moments.map(m => `<div style="font-size: 13px; color: #14171a; margin: 4px 0;">• ${m}</div>`).join('')}
+                            </div>
+                        ` : ''}
+
+                        ${dialog.ai_strengths && dialog.ai_strengths.length > 0 ? `
+                            <div style="margin-top: 12px; padding: 12px; background: #f0fdf4; border-radius: 6px; border-left: 3px solid #10b981;">
+                                <div style="font-size: 13px; color: #10b981; font-weight: 600; margin-bottom: 8px;">
+                                    ✅ Сильные стороны:
+                                </div>
+                                ${dialog.ai_strengths.map(s => `<div style="font-size: 13px; color: #14171a; margin: 4px 0;">• ${s}</div>`).join('')}
+                            </div>
+                        ` : ''}
+
+                        ${dialog.ai_key_issues && dialog.ai_key_issues.length > 0 ? `
+                            <div style="margin-top: 12px; padding: 12px; background: #fef2f2; border-radius: 6px; border-left: 3px solid #ef4444;">
+                                <div style="font-size: 13px; color: #ef4444; font-weight: 600; margin-bottom: 8px;">
+                                    ⚠️ Проблемы:
+                                </div>
+                                ${dialog.ai_key_issues.map(i => `<div style="font-size: 13px; color: #14171a; margin: 4px 0;">• ${i}</div>`).join('')}
+                            </div>
+                        ` : ''}
+
+                        ${dialog.missed_opportunities && dialog.missed_opportunities.length > 0 ? `
+                            <div style="margin-top: 12px; padding: 12px; background: #fef3c7; border-radius: 6px; border-left: 3px solid #f59e0b;">
+                                <div style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-bottom: 8px;">
+                                    💡 Упущенные возможности:
+                                </div>
+                                ${dialog.missed_opportunities.map(o => `<div style="font-size: 13px; color: #14171a; margin: 4px 0;">• ${o}</div>`).join('')}
                             </div>
                         ` : ''}
 
