@@ -283,7 +283,7 @@ class DialogScanner:
 
                 for dialog_id, status_data in statuses.items():
                     # Сохраняем только если диалог всё ещё неотвечен ИЛИ имеет важный статус
-                    if dialog_id in current_dialog_ids or status_data.get('status') in ['task', 'in-progress']:
+                    if dialog_id in current_dialog_ids or status_data.get('status') == 'task':
                         updated_statuses[dialog_id] = status_data
                     else:
                         cleaned_count += 1

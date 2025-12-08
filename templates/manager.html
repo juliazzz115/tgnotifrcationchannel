@@ -94,7 +94,6 @@
         }
 
         .stat-item.new .stat-value { color: #e0245e; }
-        .stat-item.in-progress .stat-value { color: #ff8c42; }
         .stat-item.task .stat-value { color: #17bf63; }
         .stat-item.done .stat-value { color: #657786; }
 
@@ -187,10 +186,6 @@
             border-left-color: #e0245e;
         }
 
-        .dialog-card.in-progress {
-            border-left-color: #ff8c42;
-        }
-
         .dialog-card.task {
             border-left-color: #17bf63;
         }
@@ -242,7 +237,6 @@
         }
 
         .badge.new { background: #ffe5ec; color: #e0245e; }
-        .badge.in-progress { background: #fff3e0; color: #ff8c42; }
         .badge.task { background: #e8f5e9; color: #17bf63; }
         .badge.done { background: #f5f7fa; color: #657786; }
 
@@ -481,10 +475,6 @@
                     <div class="stat-value" id="stat-new">0</div>
                     <div class="stat-label">Новые</div>
                 </div>
-                <div class="stat-item in-progress">
-                    <div class="stat-value" id="stat-in-progress">0</div>
-                    <div class="stat-label">В работе</div>
-                </div>
                 <div class="stat-item task">
                     <div class="stat-value" id="stat-task">0</div>
                     <div class="stat-label">Задачи</div>
@@ -498,11 +488,10 @@
 
         <!-- Фильтры -->
         <div class="filters">
-            <button class="filter-btn" id="today-filter" onclick="toggleTodayFilter()" style="font-weight: 600; border: 2px solid #0066cc; background: #0066cc; color: white;">📅 Только сегодня</button>
+            <button class="filter-btn" id="today-filter" onclick="toggleTodayFilter()" style="font-weight: 600; border: 2px solid #e1e8ed; background: white; color: #657786;">📅 Показать все</button>
 
             <button class="filter-btn active" data-filter="all">Все</button>
             <button class="filter-btn" data-filter="new">Новые</button>
-            <button class="filter-btn" data-filter="in-progress">В работе</button>
             <button class="filter-btn" data-filter="task">Задачи</button>
             <button class="filter-btn" data-filter="done">Решено</button>
 
@@ -531,7 +520,7 @@
         let currentFilter = 'all';
         let dateFrom = null;
         let dateTo = null;
-        let showOnlyToday = true; // По умолчанию показываем только сегодняшние
+        let showOnlyToday = false; // По умолчанию показываем все диалоги
         const managers = {{ managers|tojson }};
 
         // Подключение
@@ -618,7 +607,6 @@
 
             // Статистика
             document.getElementById('stat-new').textContent = allDialogs.filter(d => d.status === 'new').length;
-            document.getElementById('stat-in-progress').textContent = allDialogs.filter(d => d.status === 'in-progress').length;
             document.getElementById('stat-task').textContent = allDialogs.filter(d => d.status === 'task').length;
             document.getElementById('stat-done').textContent = allDialogs.filter(d => d.status === 'done').length;
 
@@ -632,7 +620,6 @@
                 const urgentClass = dialog.hours_ago > 2 ? 'urgent' : '';
                 const statusText = {
                     'new': 'Новый',
-                    'in-progress': 'В работе',
                     'task': 'Задача',
                     'done': 'Решено'
                 }[dialog.status] || dialog.status;
