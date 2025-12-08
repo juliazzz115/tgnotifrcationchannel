@@ -307,7 +307,7 @@ class DialogScanner:
             return []
 
     async def scan_all_dialogs_for_analytics(self):
-        """Получить ВСЕ диалоги за сегодня для аналитики (00:00-17:00)"""
+        """Получить прочитанные диалоги с 8:00 для аналитики"""
         try:
             me = await self.client.get_me()
             dialogs = await self.client.get_dialogs(limit=500)
@@ -315,10 +315,9 @@ class DialogScanner:
             all_dialogs = []
             
             now = datetime.now(LOCAL_TZ)
-            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            analytics_end = now.replace(hour=17, minute=0, second=0, microsecond=0)
+            today_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
 
-            logger.info(f"📊 Сбор ВСЕХ диалогов за период {today_start.strftime('%H:%M')} - {analytics_end.strftime('%H:%M')}")
+            logger.info(f"📊 Сбор прочитанных диалогов с {today_8am.strftime('%H:%M')}")
 
             for dialog in dialogs:
                 if is_excluded(dialog):
@@ -332,19 +331,21 @@ class DialogScanner:
                 if hasattr(entity, 'broadcast') or hasattr(entity, 'megagroup'):
                     continue
 
+                # Только прочитанные диалоги (unread_count == 0)
+                if dialog.unread_count > 0:
+                    continue
+
                 name = dialog.name or getattr(entity, 'username', 'Без имени')
 
-                # Получаем ВСЕ сообщения за сегодня (00:00 - 17:00)
+                # Получаем сообщения с 8:00
                 all_messages_for_analysis = []
                 try:
                     async for msg in self.client.iter_messages(entity, limit=None):
                         msg_local_time = msg.date.astimezone(LOCAL_TZ)
                         
-                        # Фильтр: только сообщения с 00:00 до 17:00 сегодня
-                        if msg_local_time < today_start:
+                        # Фильтр: только сообщения с 8:00 сегодня
+                        if msg_local_time < today_8am:
                             break
-                        if msg_local_time > analytics_end:
-                            continue
                         
                         msg_sender = await msg.get_sender()
                         is_from_me = msg_sender and msg_sender.id == me.id if msg_sender else False
@@ -614,9 +615,21 @@ def update_status():
 @app.route('/api/analytics', methods=['GET'])
 def get_analytics():
     """Получить аналитику по ВСЕМ диалогам за день (00:00-17:00)"""
-    # Используем все диалоги за день, а не только неотвеченные
-    dialogs_to_analyze = all_dialogs_for_analytics if all_dialogs_for_analytics else []
+    global all_dialogs_for_analytics
     
+    # Если данных нет или они устарели, загружаем on-demand
+    if not all_dialogs_for_analytics and telegram_client:
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            scanner = DialogScanner()
+            scanner.client = telegram_client
+            all_dialogs_for_analytics = loop.run_until_complete(scanner.scan_all_dialogs_for_analytics())
+            loop.close()
+        except Exception as e:
+            logger.error(f"Ошибка загрузки аналитики on-demand: {e}")
+    
+    dialogs_to_analyze = all_dialogs_for_analytics if all_dialogs_for_analytics else []
     daily_stats = detailed_analyzer.calculate_daily_stats(dialogs_to_analyze)
 
     return jsonify({

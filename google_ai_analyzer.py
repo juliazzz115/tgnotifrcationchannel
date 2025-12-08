@@ -14,7 +14,7 @@ class GoogleAIAnalyzer:
 
     def __init__(self, api_key: str = None):
         self.api_key = api_key or os.getenv('GOOGLE_AI_KEY')
-        self.endpoint = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent"
+        self.endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
     def analyze_dialog_with_ai(self, messages: List[Dict]) -> Dict:
         """
@@ -105,7 +105,11 @@ class GoogleAIAnalyzer:
 
         try:
             response = requests.post(
-                f"{self.endpoint}?key={self.api_key}",
+                self.endpoint,
+                headers={
+                    'Content-Type': 'application/json',
+                    'X-goog-api-key': self.api_key
+                },
                 json={
                     "contents": [{
                         "parts": [{"text": prompt}]
