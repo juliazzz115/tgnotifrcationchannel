@@ -14,20 +14,74 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            background: #f5f7fa;
             min-height: 100vh;
-            padding: 20px;
+            padding: 0;
+        }
+
+        .top-header {
+            background: white;
+            border-bottom: 1px solid #e1e8ed;
+            padding: 20px 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .top-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .top-header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 600;
+            color: #0066cc;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .nav-tab {
+            padding: 10px 20px;
+            background: white;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #657786;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .nav-tab:hover {
+            border-color: #0066cc;
+            color: #0066cc;
+        }
+
+        .nav-tab.active {
+            background: #0066cc;
+            color: white;
+            border-color: #0066cc;
         }
 
         .header {
             text-align: center;
-            color: white;
-            margin-bottom: 30px;
+            color: #14171a;
+            margin: 30px 0;
         }
 
         .header h1 {
-            font-size: 48px;
-            text-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            font-size: 36px;
             margin-bottom: 10px;
         }
 
@@ -256,13 +310,24 @@
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>📱 Telegram Alerts</h1>
-        <div class="status disconnected" id="status">🔴 Подключение...</div>
+    <div class="top-header">
+        <div class="top-container">
+            <div class="top-header-content">
+                <div class="logo">📱 Telegram Alerts</div>
+                <div class="nav-tabs">
+                    <a href="/manager" class="nav-tab">Диалоги</a>
+                    <a href="/analytics" class="nav-tab">Аналитика</a>
+                    <a href="/messages" class="nav-tab active">Уведомления</a>
+                </div>
+                <div class="status disconnected" id="status">🔴 Подключение...</div>
+            </div>
+        </div>
     </div>
 
-    <div class="messages-container" id="messagesContainer">
-        <div class="no-messages">Загрузка сообщений...</div>
+    <div class="top-container">
+        <div class="messages-container" id="messagesContainer">
+            <div class="no-messages">Загрузка сообщений...</div>
+        </div>
     </div>
 
     <!-- Модальное окно подтверждения -->

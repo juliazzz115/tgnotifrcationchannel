@@ -47,6 +47,33 @@
             color: #0066cc;
         }
 
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .nav-tab {
+            padding: 10px 20px;
+            background: white;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #657786;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .nav-tab:hover {
+            border-color: #0066cc;
+            color: #0066cc;
+        }
+
+        .nav-tab.active {
+            background: #0066cc;
+            color: white;
+            border-color: #0066cc;
+        }
+
         .status {
             display: flex;
             align-items: center;
@@ -537,6 +564,11 @@
         <div class="container">
             <div class="header-content">
                 <div class="logo">📊 Менеджер Диалогов</div>
+                <div class="nav-tabs">
+                    <a href="/manager" class="nav-tab active">Диалоги</a>
+                    <a href="/analytics" class="nav-tab">Аналитика</a>
+                    <a href="/messages" class="nav-tab">Уведомления</a>
+                </div>
                 <div class="status">
                     <span class="status-dot" id="status-dot"></span>
                     <span id="connection-status">Подключение...</span>
