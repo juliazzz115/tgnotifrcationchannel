@@ -14,7 +14,7 @@ class GoogleAIAnalyzer:
 
     def __init__(self, api_key: str = None):
         self.api_key = api_key or os.getenv('GOOGLE_AI_KEY')
-        self.endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+        self.endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
     def analyze_dialog_with_ai(self, messages: List[Dict]) -> Dict:
         """
@@ -228,7 +228,13 @@ class GoogleAIAnalyzer:
                 logger.info(f"✅ Google AI анализ выполнен успешно")
                 return result
             else:
-                logger.error(f"Google AI API error: {response.status_code}")
+                error_msg = f"Google AI API error: {response.status_code}"
+                try:
+                    error_data = response.json()
+                    error_msg += f" - {error_data.get('error', {}).get('message', 'Unknown error')}"
+                except:
+                    pass
+                logger.error(error_msg)
                 return self._fallback_analysis(messages)
 
         except Exception as e:
