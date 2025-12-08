@@ -9,9 +9,11 @@ import json
 import pytz
 from datetime import datetime, time, timezone
 from threading import Thread
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, Response
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
+import csv
+from io import StringIO
 from dotenv import load_dotenv
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -124,7 +126,7 @@ class DialogScanner:
             me = await self.client.get_me()
             dialogs = await self.client.get_dialogs(limit=300)
 
-            today_start = datetime.combine(datetime.now().date(), time.min).replace(tzinfo=timezone.utc)
+            # Убрали фильтр "только сегодня" - показываем историю
             unanswered = []
 
             for dialog in dialogs:
@@ -143,7 +145,7 @@ class DialogScanner:
                     continue
 
                 last_msg = dialog.message
-                if not last_msg or last_msg.date < today_start:
+                if not last_msg:
                     continue
 
                 await last_msg.get_sender()
@@ -159,6 +161,10 @@ class DialogScanner:
                     now = datetime.now(LOCAL_TZ)
                     time_ago = now - local_time
                     hours_ago = time_ago.total_seconds() / 3600
+
+                    # ФИЛЬТР: Показываем только если > 1 часа без ответа
+                    if hours_ago < 1.0:
+                        continue
 
                     # Формируем ссылку на чат
                     chat_link = ""
@@ -213,10 +219,10 @@ class DialogScanner:
                 # Получаем неотвеченные диалоги
                 dialogs = await self.get_unanswered_dialogs()
 
-                if dialogs:
-                    # Загружаем статусы
-                    statuses = load_statuses()
+                # Загружаем статусы
+                statuses = load_statuses()
 
+                if dialogs:
                     # Обогащаем данные статусами
                     for dialog in dialogs:
                         dialog_id = str(dialog['id'])
@@ -239,10 +245,31 @@ class DialogScanner:
                         if dialog['status'] == 'new':
                             logger.info(f"🔔 НОВЫЙ НЕОТВЕЧЕННЫЙ: {dialog['name']}")
                             socketio.emit('new_unanswered', {'dialog': dialog})
+                else:
+                    # Если нет неотвеченных, очищаем список
+                    unanswered_dialogs = []
+                    socketio.emit('dialogs_update', {'dialogs': []})
 
-                # Ждем 10 минут до следующего сканирования
-                logger.info(f"⏳ Следующее сканирование через 10 минут...")
-                await asyncio.sleep(600)  # 10 минут
+                # АВТООЧИСТКА: Убираем из статусов диалоги которых больше нет в неотвеченных
+                # (значит мы ответили или клиент написал новое сообщение)
+                current_dialog_ids = set(str(d['id']) for d in dialogs)
+                updated_statuses = {}
+                cleaned_count = 0
+
+                for dialog_id, status_data in statuses.items():
+                    # Сохраняем только если диалог всё ещё неотвечен ИЛИ имеет важный статус
+                    if dialog_id in current_dialog_ids or status_data.get('status') in ['task', 'in-progress']:
+                        updated_statuses[dialog_id] = status_data
+                    else:
+                        cleaned_count += 1
+
+                if cleaned_count > 0:
+                    logger.info(f"🧹 Автоочистка: удалено {cleaned_count} статусов (диалоги отвечены)")
+                    save_statuses(updated_statuses)
+
+                # Ждем 3 минуты до следующего сканирования (частая проверка)
+                logger.info(f"⏳ Следующее сканирование через 3 минуты...")
+                await asyncio.sleep(180)  # 3 минуты
 
         except Exception as e:
             logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА: {e}", exc_info=True)
@@ -329,6 +356,46 @@ def update_status():
     })
 
     return jsonify({'success': True})
+
+
+@app.route('/api/export_csv', methods=['GET'])
+def export_csv():
+    """Экспорт диалогов в CSV"""
+    statuses = load_statuses()
+
+    # Собираем данные
+    rows = []
+    for dialog in unanswered_dialogs:
+        dialog_id = str(dialog['id'])
+        status_data = statuses.get(dialog_id, {})
+
+        rows.append({
+            'Дата': dialog['date'],
+            'Время': dialog['time'],
+            'Имя': dialog['name'],
+            'Часов без ответа': dialog['hours_ago'],
+            'Сообщение': dialog['text'],
+            'Статус': status_data.get('status', 'new'),
+            'Ответственный': status_data.get('manager', ''),
+            'Заметка': status_data.get('note', ''),
+            'Ссылка': dialog['chat_link']
+        })
+
+    # Создаем CSV
+    output = StringIO()
+    if rows:
+        fieldnames = ['Дата', 'Время', 'Имя', 'Часов без ответа', 'Сообщение', 'Статус', 'Ответственный', 'Заметка', 'Ссылка']
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    # Возвращаем как файл
+    csv_data = output.getvalue()
+    return Response(
+        csv_data,
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename=dialogs_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'}
+    )
 
 
 # ============================================================================

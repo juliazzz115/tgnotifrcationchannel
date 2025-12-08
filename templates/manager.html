@@ -78,6 +78,37 @@
             align-items: center;
         }
 
+        .date-filter {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .date-filter input {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .btn-export {
+            margin-left: auto;
+            padding: 10px 20px;
+            background: #10b981;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .btn-export:hover {
+            background: #059669;
+            transform: translateY(-2px);
+        }
+
         .filter-btn {
             padding: 10px 20px;
             border: 2px solid #ddd;
@@ -335,6 +366,16 @@
             <button class="filter-btn" data-filter="in-progress">🟡 В работе</button>
             <button class="filter-btn" data-filter="task">🟢 Задачи</button>
             <button class="filter-btn" data-filter="done">✅ Решено</button>
+
+            <div class="date-filter">
+                <label>С:</label>
+                <input type="date" id="date-from">
+                <label>По:</label>
+                <input type="date" id="date-to">
+                <button class="filter-btn" onclick="applyDateFilter()">Применить</button>
+            </div>
+
+            <button class="btn-export" onclick="exportCSV()">📥 Экспорт CSV</button>
         </div>
 
         <!-- Диалоги -->
@@ -351,6 +392,8 @@
 
         let allDialogs = [];
         let currentFilter = 'all';
+        let dateFrom = null;
+        let dateTo = null;
         const managers = {{ managers|tojson }};
 
         // Подключение
@@ -413,10 +456,20 @@
         function renderDialogs() {
             const container = document.getElementById('dialogs');
 
-            // Фильтрация
+            // Фильтрация по статусу
             let filtered = allDialogs;
             if (currentFilter !== 'all') {
                 filtered = allDialogs.filter(d => d.status === currentFilter);
+            }
+
+            // Фильтрация по датам
+            if (dateFrom || dateTo) {
+                filtered = filtered.filter(d => {
+                    const dialogDate = parseDate(d.date); // формат dd.mm.yyyy
+                    if (dateFrom && dialogDate < new Date(dateFrom)) return false;
+                    if (dateTo && dialogDate > new Date(dateTo)) return false;
+                    return true;
+                });
             }
 
             // Статистика
@@ -484,7 +537,7 @@
                             <div class="action-buttons">
                                 <button class="btn btn-chat" onclick="openChat('${dialog.chat_link}')">💬 Открыть чат</button>
                                 ${dialog.status !== 'in-progress' ? `<button class="btn btn-take" onclick="updateStatus(${dialog.id}, 'in-progress')">🟡 Взять в работу</button>` : ''}
-                                ${dialog.status !== 'task' ? `<button class="btn btn-task" onclick="updateStatus(${dialog.id}, 'task')">🟢 Поставить задачу</button>` : ''}
+                                ${dialog.status !== 'task' ? `<button class="btn btn-task" onclick="setTask(${dialog.id})">🟢 Поставить задачу</button>` : ''}
                                 ${dialog.status !== 'done' ? `<button class="btn btn-done" onclick="updateStatus(${dialog.id}, 'done')">✅ Решено</button>` : ''}
                             </div>
                         </div>
@@ -565,6 +618,39 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // Поставить задачу в CRM
+        function setTask(dialogId) {
+            const manager = document.getElementById(`manager-${dialogId}`).value;
+            const note = document.getElementById(`note-${dialogId}`).value;
+
+            // Обновляем статус на "задача"
+            updateStatus(dialogId, 'task');
+
+            // Открываем CRM для создания задачи
+            window.open('https://crm.local/addtask', '_blank');
+        }
+
+        // Фильтр по датам
+        function applyDateFilter() {
+            dateFrom = document.getElementById('date-from').value;
+            dateTo = document.getElementById('date-to').value;
+            renderDialogs();
+        }
+
+        // Парсинг даты из формата dd.mm.yyyy
+        function parseDate(dateStr) {
+            const parts = dateStr.split('.');
+            if (parts.length === 3) {
+                return new Date(parts[2], parts[1] - 1, parts[0]);
+            }
+            return null;
+        }
+
+        // Экспорт CSV
+        function exportCSV() {
+            window.open('/api/export_csv', '_blank');
         }
 
         // Загрузка при старте
