@@ -696,7 +696,9 @@
 
             let html = '';
             filtered.forEach(dialog => {
-                const urgentClass = dialog.hours_ago > 2 ? 'urgent' : '';
+                // Время ожидания в минутах (рабочее время)
+                const waitingMinutes = dialog.waiting_first_response_minutes || 0;
+                const urgentClass = waitingMinutes > 60 ? 'urgent' : '';
                 const statusText = {
                     'new': 'Новый',
                     'task': 'Задача',
@@ -778,7 +780,7 @@
                             </div>
                             <div class="dialog-time-info">
                                 <div class="dialog-date">${dialog.time} | ${dialog.date}</div>
-                                <div class="time-ago ${urgentClass}">⏱️ ${dialog.hours_ago}ч без ответа</div>
+                                <div class="time-ago ${urgentClass}">⏱️ ${waitingMinutes} мин без ответа (рабочее время)</div>
                             </div>
                         </div>
 

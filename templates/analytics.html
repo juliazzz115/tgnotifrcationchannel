@@ -383,8 +383,8 @@
             const dialogs = data.dialogs;
 
             document.getElementById('stat-total').textContent = stats.total_dialogs;
-            document.getElementById('stat-avg-time').textContent = stats.avg_response_time_hours ? `${stats.avg_response_time_hours}ч` : '-';
-            document.getElementById('stat-avg-desc').textContent = stats.avg_response_time_minutes ? `${stats.avg_response_time_minutes} минут` : 'Нет данных';
+            document.getElementById('stat-avg-time').textContent = stats.avg_response_time_minutes ? `${stats.avg_response_time_minutes} мин` : '-';
+            document.getElementById('stat-avg-desc').textContent = stats.avg_response_time_minutes ? `${stats.avg_response_time_minutes} минут (рабочее время 8:00-16:00)` : 'Нет данных';
             
             document.getElementById('stat-overtime').textContent = stats.overtime_count;
             document.getElementById('stat-overtime-desc').textContent = `${stats.overtime_percentage}% от общего числа`;
@@ -524,10 +524,9 @@
                         <div class="metric-row">
                             <div class="metric-item">
                                 <span class="metric-icon">⏱️</span>
-                                <span class="metric-label">Время ответа:</span>
+                                <span class="metric-label">Время ответа (раб. время):</span>
                                 <span class="metric-value">
-                                    ${dialog.response_delay_hours ? `${dialog.response_delay_hours}ч` : 
-                                      dialog.response_delay_minutes ? `${dialog.response_delay_minutes} мин` : '-'}
+                                    ${dialog.response_delay_working_minutes ? `${dialog.response_delay_working_minutes} мин` : '-'}
                                 </span>
                             </div>
 
