@@ -156,8 +156,14 @@ class DialogScanner:
                     name = dialog.name or getattr(entity, 'username', 'Без имени')
                     local_time = last_msg.date.astimezone(LOCAL_TZ)
 
-                    # Время без ответа
+                    # ФИЛЬТР: Только сегодняшние сообщения (с 00:00 до текущего момента)
                     now = datetime.now(LOCAL_TZ)
+                    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+                    if local_time < today_start:
+                        continue  # Пропускаем старые диалоги (не за сегодня)
+
+                    # Время без ответа
                     time_ago = now - local_time
                     hours_ago = time_ago.total_seconds() / 3600
 
