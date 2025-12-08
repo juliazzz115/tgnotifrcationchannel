@@ -132,7 +132,6 @@ class DialogScanner:
             me = await self.client.get_me()
             dialogs = await self.client.get_dialogs(limit=300)
 
-            # Убрали фильтр "только сегодня" - показываем историю
             unanswered = []
 
             for dialog in dialogs:
@@ -177,10 +176,10 @@ class DialogScanner:
                     if hours_ago < 1.0:
                         continue
 
-                    # Получаем последние 10 сообщений для детального анализа
+                    # ОРИГИНАЛЬНАЯ ЛОГИКА: Получаем последние 3 сообщения для контекста
                     recent_messages = []
                     try:
-                        async for msg in self.client.iter_messages(entity, limit=10):
+                        async for msg in self.client.iter_messages(entity, limit=3):
                             msg_sender = await msg.get_sender()
                             is_from_me = msg_sender and msg_sender.id == me.id if msg_sender else False
 
@@ -188,8 +187,7 @@ class DialogScanner:
                                 'text': msg.message or '[нет текста]',
                                 'time': msg.date.astimezone(LOCAL_TZ).strftime('%H:%M'),
                                 'from_me': is_from_me,
-                                'sender_name': 'Вы' if is_from_me else name,
-                                'timestamp': msg.date.timestamp()
+                                'sender_name': 'Вы' if is_from_me else name
                             })
 
                         # Разворачиваем чтобы старые были первыми
@@ -200,9 +198,28 @@ class DialogScanner:
                             'text': last_msg.message or '[нет текста]',
                             'time': local_time.strftime('%H:%M'),
                             'from_me': False,
-                            'sender_name': name,
-                            'timestamp': last_msg.date.timestamp()
+                            'sender_name': name
                         }]
+
+                    # Получаем ВСЕ сообщения для расширенного анализа (с timestamp)
+                    all_messages_for_analysis = []
+                    try:
+                        async for msg in self.client.iter_messages(entity, limit=10):
+                            msg_sender = await msg.get_sender()
+                            is_from_me = msg_sender and msg_sender.id == me.id if msg_sender else False
+
+                            all_messages_for_analysis.append({
+                                'text': msg.message or '[нет текста]',
+                                'time': msg.date.astimezone(LOCAL_TZ).strftime('%H:%M'),
+                                'from_me': is_from_me,
+                                'sender_name': 'Вы' if is_from_me else name,
+                                'timestamp': msg.date.timestamp()
+                            })
+
+                        all_messages_for_analysis.reverse()
+                    except Exception as e:
+                        logger.warning(f"Не удалось получить расширенную историю для {name}: {e}")
+                        all_messages_for_analysis = recent_messages
 
                     # Формируем ссылку на чат
                     chat_link = ""
@@ -214,18 +231,21 @@ class DialogScanner:
                     # 🤖 БАЗОВЫЙ AI АНАЛИЗ
                     analysis = sentiment_analyzer.analyze_dialog(recent_messages, hours_ago)
                     
-                    # 📊 ДЕТАЛЬНЫЙ АНАЛИЗ ВРЕМЕНИ ОТВЕТА
-                    response_analysis = detailed_analyzer.analyze_response_times(recent_messages)
+                    # 📊 ДЕТАЛЬНЫЙ АНАЛИЗ ВРЕМЕНИ ОТВЕТА НА ПЕРВОЕ СООБЩЕНИЕ
+                    response_analysis = detailed_analyzer.analyze_response_times(all_messages_for_analysis)
+                    
+                    # 📊 СРЕДНЕЕ ВРЕМЯ ОТВЕТА НА ВСЕ СООБЩЕНИЯ В ДИАЛОГЕ
+                    all_responses_analysis = detailed_analyzer.analyze_all_response_times(all_messages_for_analysis)
                     
                     # 👤 АНАЛИЗ ПОВЕДЕНИЯ МЕНЕДЖЕРА
-                    manager_analysis = detailed_analyzer.analyze_manager_behavior(recent_messages)
+                    manager_analysis = detailed_analyzer.analyze_manager_behavior(all_messages_for_analysis)
                     
-                    # 🤖 GOOGLE AI АНАЛИЗ (асинхронно, но не блокируем)
+                    # 🤖 GOOGLE AI АНАЛИЗ (async, но не блокируем)
                     ai_analysis = {}
                     try:
-                        ai_analysis = google_ai_analyzer.analyze_dialog_with_ai(recent_messages[:5])
+                        ai_analysis = google_ai_analyzer.analyze_dialog_with_ai(all_messages_for_analysis[:5])
                     except Exception as e:
-                        logger.warning(f"Google AI анализ не удался: {e}")
+                        logger.warning(f"Google AI анализ не удался для {name}: {e}")
 
                     unanswered.append({
                         'id': entity.id,
@@ -233,7 +253,7 @@ class DialogScanner:
                         'time': local_time.strftime('%H:%M'),
                         'date': local_time.strftime('%d.%m.%Y'),
                         'text': (last_msg.message or '[нет текста]').strip()[:200],
-                        'messages': recent_messages[:3],
+                        'messages': recent_messages,  # ОРИГИНАЛЬНЫЕ 3 сообщения БЕЗ timestamp
                         'hours_ago': round(hours_ago, 1),
                         'chat_link': chat_link,
                         'timestamp': last_msg.date.timestamp(),
@@ -243,23 +263,31 @@ class DialogScanner:
                         'client_emotion': analysis['client_emotion'],
                         'urgency': analysis['urgency'],
                         'issues': analysis['issues'],
+                        'introduced': analysis.get('introduced'),
+                        'manager_name': analysis.get('manager_name'),
+                        'greeting': analysis.get('greeting'),
                         'is_critical': analysis['is_critical'],
                         'warnings': analysis['warnings'],
                         'recommendations': analysis['recommendations'],
-                        # Детальный анализ времени
+                        # Детальный анализ времени ПЕРВОГО ответа (рабочее время 8-16)
                         'response_delay_minutes': response_analysis.get('response_delay_minutes'),
+                        'response_delay_working_minutes': response_analysis.get('response_delay_working_minutes'),
                         'response_delay_hours': response_analysis.get('response_delay_hours'),
                         'response_quality': response_analysis.get('response_quality'),
                         'is_overtime': response_analysis.get('is_overtime'),
+                        'waiting_first_response_minutes': response_analysis.get('waiting_first_response_minutes'),
+                        # Среднее время ответа на ВСЕ сообщения (рабочее время 8-16)
+                        'avg_response_time_minutes': all_responses_analysis.get('avg_response_time_minutes'),
+                        'total_client_messages': all_responses_analysis.get('total_client_messages'),
+                        'total_responses': all_responses_analysis.get('total_responses'),
                         # Анализ менеджера
-                        'introduced': manager_analysis.get('introduced'),
-                        'manager_name': manager_analysis.get('manager_name'),
-                        'greeting': manager_analysis.get('used_greeting'),
                         'message_count': manager_analysis.get('message_count'),
                         'politeness_markers': manager_analysis.get('politeness_markers'),
                         # Google AI анализ
                         'professionalism_score': ai_analysis.get('professionalism_score'),
                         'ai_suggestions': ai_analysis.get('suggestions', []),
+                        'ai_key_issues': ai_analysis.get('key_issues', []),
+                        'ai_strengths': ai_analysis.get('strengths', []),
                         'response_tone': ai_analysis.get('response_tone'),
                         'greeting_quality': ai_analysis.get('greeting_quality')
                     })
@@ -330,26 +358,23 @@ class DialogScanner:
                     unanswered_dialogs = []
                     socketio.emit('dialogs_update', {'dialogs': []})
 
-                # АВТООЧИСТКА: Убираем из статусов диалоги которых больше нет в неотвеченных
-                # (значит мы ответили или клиент написал новое сообщение)
+                # АВТООЧИСТКА
                 current_dialog_ids = set(str(d['id']) for d in dialogs)
                 updated_statuses = {}
                 cleaned_count = 0
 
                 for dialog_id, status_data in statuses.items():
-                    # Сохраняем только если диалог всё ещё неотвечен ИЛИ имеет важный статус
                     if dialog_id in current_dialog_ids or status_data.get('status') == 'task':
                         updated_statuses[dialog_id] = status_data
                     else:
                         cleaned_count += 1
 
                 if cleaned_count > 0:
-                    logger.info(f"🧹 Автоочистка: удалено {cleaned_count} статусов (диалоги отвечены)")
+                    logger.info(f"🧹 Автоочистка: удалено {cleaned_count} статусов")
                     save_statuses(updated_statuses)
 
-                # Ждем 3 минуты до следующего сканирования (частая проверка)
                 logger.info(f"⏳ Следующее сканирование через 3 минуты...")
-                await asyncio.sleep(180)  # 3 минуты
+                await asyncio.sleep(180)
 
         except Exception as e:
             logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА: {e}", exc_info=True)
@@ -415,7 +440,6 @@ def get_dialogs():
     """Получить список неотвеченных диалогов"""
     statuses = load_statuses()
 
-    # Обогащаем диалоги статусами
     enriched_dialogs = []
     for dialog in unanswered_dialogs:
         dialog_id = str(dialog['id'])
@@ -451,7 +475,6 @@ def update_status():
 
     save_statuses(statuses)
 
-    # Уведомляем всех клиентов об изменении
     socketio.emit('status_changed', {
         'dialog_id': dialog_id,
         'status': status,
@@ -467,7 +490,6 @@ def get_analytics():
     """Получить аналитику по диалогам"""
     statuses = load_statuses()
 
-    # Обогащаем диалоги статусами
     enriched_dialogs = []
     for dialog in unanswered_dialogs:
         dialog_id = str(dialog['id'])
@@ -480,7 +502,6 @@ def get_analytics():
             enriched['note'] = ''
         enriched_dialogs.append(enriched)
 
-    # Расчет общей статистики за день
     daily_stats = detailed_analyzer.calculate_daily_stats(enriched_dialogs)
 
     return jsonify({
@@ -494,7 +515,6 @@ def export_csv():
     """Экспорт диалогов в CSV"""
     statuses = load_statuses()
 
-    # Собираем данные
     rows = []
     for dialog in unanswered_dialogs:
         dialog_id = str(dialog['id'])
@@ -512,7 +532,6 @@ def export_csv():
             'Ссылка': dialog['chat_link']
         })
 
-    # Создаем CSV
     output = StringIO()
     if rows:
         fieldnames = ['Дата', 'Время', 'Имя', 'Часов без ответа', 'Сообщение', 'Статус', 'Ответственный', 'Заметка', 'Ссылка']
@@ -520,7 +539,6 @@ def export_csv():
         writer.writeheader()
         writer.writerows(rows)
 
-    # Возвращаем как файл
     csv_data = output.getvalue()
     return Response(
         csv_data,
@@ -530,7 +548,7 @@ def export_csv():
 
 
 # ============================================================================
-# SETUP API (из старого web_app.py)
+# SETUP API
 # ============================================================================
 
 @app.route('/api/send_code', methods=['POST'])
@@ -628,13 +646,11 @@ if __name__ == '__main__':
     logger.info("🚀 Запуск Telegram Alerts - Система для менеджеров")
 
     if session_exists:
-        # Запускаем сканер в отдельном потоке
         scanner_thread = Thread(target=run_scanner, daemon=True)
         scanner_thread.start()
         logger.info("✅ Сканер запущен в фоновом потоке")
     else:
         logger.warning("⚠️  Сессия не найдена. Откройте /setup для настройки")
 
-    # Запуск Flask
     port = int(os.getenv('PORT', 5000))
     socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
