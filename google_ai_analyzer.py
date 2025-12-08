@@ -65,6 +65,8 @@ class GoogleAIAnalyzer:
 ВХОДНЫЕ ДАННЫЕ:
 {input_data}
 
+ВАЖНО: ВСЕ ЗНАЧЕНИЯ В JSON ДОЛЖНЫ БЫТЬ НА РУССКОМ ЯЗЫКЕ (кроме ключей). Используй русские слова: "низкий", "средний", "высокий", "решён", "дружелюбный" и т.д.
+
 ПРОВЕДИ ДЕТАЛЬНЫЙ МНОГОУРОВНЕВЫЙ АНАЛИЗ:
 
 1. НАСТРОЕНИЕ И ЭМОЦИИ КЛИЕНТА:
@@ -143,19 +145,19 @@ class GoogleAIAnalyzer:
    - client_satisfaction_estimate: оценка удовлетворенности клиента (1-10)
    - summary: краткое резюме диалога (1-2 предложения)
 
-Верни ТОЛЬКО JSON (без комментариев, без markdown):
+Верни ТОЛЬКО JSON (без комментариев, без markdown). ВСЕ ЗНАЧЕНИЯ НА РУССКОМ:
 {{
-  "overall_sentiment": "positive",
+  "overall_sentiment": "позитивное",
   "sentiment_score": 0.7,
-  "client_state": "calm",
-  "emotion_dynamics": "consistently_positive",
-  "request_type": "status_update",
+  "client_state": "спокоен",
+  "emotion_dynamics": "стабильно позитивное",
+  "request_type": "запрос статуса",
   "main_topic": "статус регистрации компании",
-  "urgency_level": "medium",
+  "urgency_level": "средняя",
   "client_expectations": "получить конкретные сроки",
   "manager_introduced": true,
   "manager_name": "Владислав",
-  "greeting_quality": "good",
+  "greeting_quality": "хорошее",
   "first_impression": "профессионально и тепло",
   "politeness_score": 8,
   "clarity_score": 7,
@@ -163,17 +165,17 @@ class GoogleAIAnalyzer:
   "responsiveness_score": 8,
   "empathy_score": 7,
   "professionalism_score": 7,
-  "communication_style": "friendly",
+  "communication_style": "дружелюбный",
   "used_personalization": true,
   "tone_consistency": "последовательный",
   "language_quality": "отличное",
-  "resolution_status": "resolved",
+  "resolution_status": "решён",
   "solution_provided": true,
   "next_steps_clear": true,
   "timeline_given": true,
   "follow_up_planned": false,
-  "risk_level": "low",
-  "churn_risk_level": "low",
+  "risk_level": "низкий",
+  "churn_risk_level": "низкий",
   "need_urgent_attention": false,
   "escalation_needed": false,
   "risks": [],
@@ -186,7 +188,7 @@ class GoogleAIAnalyzer:
   "suggestions": ["продолжать в том же духе", "можно добавить больше эмпатии", "предлагать дополнительную помощь проактивно"],
   "priority_actions": [],
   "training_needs": [],
-  "overall_quality": "good",
+  "overall_quality": "хорошее",
   "client_satisfaction_estimate": 8,
   "summary": "Качественный диалог с быстрым решением вопроса клиента"
 }}"""

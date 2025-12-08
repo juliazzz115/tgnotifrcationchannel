@@ -8,6 +8,7 @@ import logging
 import json
 import pytz
 from datetime import datetime, time, timezone
+from pathlib import Path
 from threading import Thread
 from flask import Flask, render_template, request, jsonify, Response, redirect
 from flask_socketio import SocketIO, emit
@@ -21,6 +22,7 @@ from telethon.errors import SessionPasswordNeededError
 from sentiment_analyzer import analyzer as sentiment_analyzer
 from detailed_analyzer import detailed_analyzer
 from google_ai_analyzer import google_ai_analyzer
+from data_archiver import data_archiver
 
 load_dotenv()
 
@@ -365,9 +367,8 @@ class DialogScanner:
                 if hasattr(entity, 'broadcast') or hasattr(entity, 'megagroup'):
                     continue
 
-                # Только прочитанные диалоги (любое последнее сообщение - от нас или клиента)
-                if dialog.unread_count > 0:
-                    continue
+                # ВСЕ диалоги (прочитанные и непрочитанные) для полной аналитики
+                # Удален фильтр по unread_count - показываем ВСЕ диалоги за день
 
                 name = dialog.name or getattr(entity, 'username', 'Без имени')
 
@@ -577,6 +578,45 @@ class DialogScanner:
                     logger.info("📊 Сбор диалогов для аналитики...")
                     all_dialogs = await self.scan_all_dialogs_for_analytics()
                     all_dialogs_for_analytics = all_dialogs
+
+                # АРХИВАЦИЯ И ОЧИСТКА ДАННЫХ В 7:00 УТРА
+                now = datetime.now(LOCAL_TZ)
+                if now.hour == 7 and now.minute < 3:  # Окно 7:00-7:03
+                    # Проверяем, архивировали ли уже сегодня
+                    today_str = now.strftime('%Y-%m-%d')
+                    archive_marker_file = f'.archived_{today_str}'
+                    
+                    if not os.path.exists(archive_marker_file):
+                        logger.info("=" * 80)
+                        logger.info("🕖 7:00 - АРХИВАЦИЯ И ОБНУЛЕНИЕ ДАННЫХ")
+                        logger.info("=" * 80)
+                        
+                        # Архивируем данные за вчера
+                        if all_dialogs_for_analytics:
+                            archive_result = data_archiver.archive_today_data(all_dialogs_for_analytics)
+                            if archive_result.get('success'):
+                                logger.info(f"✅ Сохранено диалогов: {archive_result['dialogs_count']}")
+                                logger.info(f"📄 JSON: {archive_result['json_filename']}")
+                                logger.info(f"📊 CSV: {archive_result['csv_filename']}")
+                        
+                        # Очищаем данные
+                        all_dialogs_for_analytics = []
+                        unanswered_dialogs = []
+                        
+                        # Очищаем старые архивы (>30 дней)
+                        data_archiver.cleanup_old_archives(keep_days=30)
+                        
+                        # Создаем маркер, что архивация выполнена
+                        with open(archive_marker_file, 'w') as f:
+                            f.write(now.isoformat())
+                        
+                        # Удаляем старые маркеры (вчерашние)
+                        for old_marker in Path('.').glob('.archived_*'):
+                            if old_marker.name != archive_marker_file:
+                                old_marker.unlink()
+                        
+                        logger.info("🔄 Данные обнулены. Готово к новому рабочему дню!")
+                        logger.info("=" * 80)
 
                 logger.info(f"⏳ Следующее сканирование через 3 минуты...")
                 await asyncio.sleep(180)
@@ -864,6 +904,65 @@ def verify_code():
 
     result = temp_loop.run_until_complete(verify())
     return jsonify(result)
+
+
+# ============================================================================
+# АРХИВЫ И СКАЧИВАНИЕ
+# ============================================================================
+
+@app.route('/archives')
+def archives_page():
+    """Страница со списком архивов"""
+    return render_template('archives.html')
+
+
+@app.route('/api/archives/list', methods=['GET'])
+def api_archives_list():
+    """Получить список всех архивов"""
+    archives = data_archiver.get_archives_list()
+    return jsonify({'archives': archives})
+
+
+@app.route('/api/archives/download/<filename>')
+def download_archive(filename):
+    """Скачать архивный файл"""
+    from flask import send_file
+    
+    # Проверка безопасности - только файлы из archives/
+    if '..' in filename or '/' in filename:
+        return jsonify({'error': 'Invalid filename'}), 400
+    
+    file_path = Path('archives') / filename
+    
+    if not file_path.exists():
+        return jsonify({'error': 'File not found'}), 404
+    
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@app.route('/api/archives/create_now', methods=['POST'])
+def create_archive_now():
+    """Создать архив прямо сейчас (ручной экспорт)"""
+    dialogs_data = all_dialogs_for_analytics if all_dialogs_for_analytics else unanswered_dialogs
+    
+    if not dialogs_data:
+        return jsonify({'error': 'Нет данных для архивации'}), 400
+    
+    result = data_archiver.archive_today_data(dialogs_data)
+    
+    if result.get('success'):
+        return jsonify({
+            'success': True,
+            'message': f"Архив создан: {result['dialogs_count']} диалогов",
+            'json_filename': result['json_filename'],
+            'csv_filename': result['csv_filename']
+        })
+    else:
+        return jsonify({'error': result.get('error', 'Unknown error')}), 500
 
 
 # ============================================================================
