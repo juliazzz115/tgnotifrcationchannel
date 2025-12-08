@@ -6,6 +6,9 @@
 .env
 config.ini
 
+# Runtime data
+dialog_statuses.json
+
 # Python
 __pycache__/
 *.py[cod]

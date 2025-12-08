@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Менеджер диалогов</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 42px;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .stats {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: rgba(255,255,255,0.95);
+            padding: 15px 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .stat-card .label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .stat-card.new .value { color: #ef4444; }
+        .stat-card.in-progress .value { color: #f59e0b; }
+        .stat-card.task .value { color: #10b981; }
+        .stat-card.done .value { color: #6b7280; }
+
+        .filters {
+            background: rgba(255,255,255,0.95);
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-btn {
+            padding: 10px 20px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .filter-btn:hover {
+            background: #f3f4f6;
+        }
+
+        .filter-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .dialogs {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .dialog-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            transition: all 0.3s;
+            border-left: 5px solid #ddd;
+        }
+
+        .dialog-card.new {
+            border-left-color: #ef4444;
+            animation: pulse-red 2s infinite;
+        }
+
+        .dialog-card.in-progress {
+            border-left-color: #f59e0b;
+        }
+
+        .dialog-card.task {
+            border-left-color: #10b981;
+        }
+
+        .dialog-card.done {
+            border-left-color: #6b7280;
+            opacity: 0.6;
+        }
+
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+            50% { box-shadow: 0 5px 25px rgba(239, 68, 68, 0.5); }
+        }
+
+        .dialog-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f3f4f6;
+        }
+
+        .dialog-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .dialog-time {
+            font-size: 16px;
+            color: #666;
+        }
+
+        .time-ago {
+            font-size: 14px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            background: #fef3c7;
+            color: #92400e;
+            font-weight: bold;
+        }
+
+        .time-ago.urgent {
+            background: #fecaca;
+            color: #991b1b;
+        }
+
+        .dialog-text {
+            font-size: 18px;
+            line-height: 1.6;
+            color: #555;
+            margin-bottom: 15px;
+            padding: 15px;
+            background: #f9fafb;
+            border-radius: 8px;
+        }
+
+        .dialog-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .action-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .action-group label {
+            font-size: 14px;
+            color: #666;
+            font-weight: bold;
+        }
+
+        .action-group select,
+        .action-group input,
+        .action-group textarea {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .action-group textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .action-buttons {
+            grid-column: 1 / -1;
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn-take {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .btn-task {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-done {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-chat {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .no-dialogs {
+            text-align: center;
+            color: white;
+            font-size: 32px;
+            margin-top: 100px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .status-badge.new {
+            background: #fecaca;
+            color: #991b1b;
+        }
+
+        .status-badge.in-progress {
+            background: #fed7aa;
+            color: #92400e;
+        }
+
+        .status-badge.task {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-badge.done {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .manager-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            background: #dbeafe;
+            color: #1e40af;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Менеджер диалогов</h1>
+            <div id="connection-status">🔴 Подключение...</div>
+        </div>
+
+        <!-- Статистика -->
+        <div class="stats">
+            <div class="stat-card new">
+                <div class="label">🔴 Новые</div>
+                <div class="value" id="stat-new">0</div>
+            </div>
+            <div class="stat-card in-progress">
+                <div class="label">🟡 В работе</div>
+                <div class="value" id="stat-in-progress">0</div>
+            </div>
+            <div class="stat-card task">
+                <div class="label">🟢 Задачи</div>
+                <div class="value" id="stat-task">0</div>
+            </div>
+            <div class="stat-card done">
+                <div class="label">✅ Решено</div>
+                <div class="value" id="stat-done">0</div>
+            </div>
+        </div>
+
+        <!-- Фильтры -->
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">Все</button>
+            <button class="filter-btn" data-filter="new">🔴 Новые</button>
+            <button class="filter-btn" data-filter="in-progress">🟡 В работе</button>
+            <button class="filter-btn" data-filter="task">🟢 Задачи</button>
+            <button class="filter-btn" data-filter="done">✅ Решено</button>
+        </div>
+
+        <!-- Диалоги -->
+        <div class="dialogs" id="dialogs">
+            <div class="no-dialogs">Загрузка диалогов...</div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io({
+            transports: ['websocket', 'polling'],
+            reconnection: true
+        });
+
+        let allDialogs = [];
+        let currentFilter = 'all';
+        const managers = {{ managers|tojson }};
+
+        // Подключение
+        socket.on('connect', () => {
+            console.log('✅ Подключено');
+            document.getElementById('connection-status').innerHTML = '✅ Онлайн';
+            document.getElementById('connection-status').style.color = '#10b981';
+            loadDialogs();
+        });
+
+        socket.on('disconnect', () => {
+            console.log('❌ Отключено');
+            document.getElementById('connection-status').innerHTML = '🔴 Офлайн';
+            document.getElementById('connection-status').style.color = '#ef4444';
+        });
+
+        // Обновление диалогов
+        socket.on('dialogs_update', (data) => {
+            console.log('📥 Получены диалоги:', data);
+            allDialogs = data.dialogs;
+            renderDialogs();
+        });
+
+        // Новый неотвеченный диалог
+        socket.on('new_unanswered', (data) => {
+            console.log('🔔 НОВЫЙ НЕОТВЕЧЕННЫЙ!', data);
+            playAlertSound();
+
+            // Обновляем список
+            loadDialogs();
+        });
+
+        // Изменение статуса
+        socket.on('status_changed', (data) => {
+            console.log('🔄 Статус изменен:', data);
+
+            // Обновляем локальный список
+            const dialog = allDialogs.find(d => String(d.id) === String(data.dialog_id));
+            if (dialog) {
+                dialog.status = data.status;
+                dialog.manager = data.manager;
+                dialog.note = data.note;
+                renderDialogs();
+            }
+        });
+
+        // Загрузка диалогов с сервера
+        async function loadDialogs() {
+            try {
+                const response = await fetch('/api/dialogs');
+                const data = await response.json();
+                allDialogs = data.dialogs;
+                renderDialogs();
+            } catch (e) {
+                console.error('Ошибка загрузки диалогов:', e);
+            }
+        }
+
+        // Отрисовка диалогов
+        function renderDialogs() {
+            const container = document.getElementById('dialogs');
+
+            // Фильтрация
+            let filtered = allDialogs;
+            if (currentFilter !== 'all') {
+                filtered = allDialogs.filter(d => d.status === currentFilter);
+            }
+
+            // Статистика
+            const stats = {
+                new: allDialogs.filter(d => d.status === 'new').length,
+                'in-progress': allDialogs.filter(d => d.status === 'in-progress').length,
+                task: allDialogs.filter(d => d.status === 'task').length,
+                done: allDialogs.filter(d => d.status === 'done').length
+            };
+
+            document.getElementById('stat-new').textContent = stats.new;
+            document.getElementById('stat-in-progress').textContent = stats['in-progress'];
+            document.getElementById('stat-task').textContent = stats.task;
+            document.getElementById('stat-done').textContent = stats.done;
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="no-dialogs">Нет диалогов</div>';
+                return;
+            }
+
+            let html = '';
+            filtered.forEach(dialog => {
+                const urgentClass = dialog.hours_ago > 2 ? 'urgent' : '';
+                const statusText = {
+                    'new': '🔴 Новый',
+                    'in-progress': '🟡 В работе',
+                    'task': '🟢 Задача поставлена',
+                    'done': '✅ Решено'
+                }[dialog.status] || dialog.status;
+
+                html += `
+                    <div class="dialog-card ${dialog.status}" id="dialog-${dialog.id}">
+                        <div class="dialog-header">
+                            <div>
+                                <div class="dialog-name">${escapeHtml(dialog.name)}</div>
+                                <span class="status-badge ${dialog.status}">${statusText}</span>
+                                ${dialog.manager ? `<span class="manager-badge">👤 ${escapeHtml(dialog.manager)}</span>` : ''}
+                            </div>
+                            <div class="dialog-time">
+                                ${dialog.time} | ${dialog.date}
+                                <div class="time-ago ${urgentClass}">⏱️ ${dialog.hours_ago}ч без ответа</div>
+                            </div>
+                        </div>
+
+                        <div class="dialog-text">${escapeHtml(dialog.text)}</div>
+
+                        ${dialog.note ? `<div style="background: #fef3c7; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+                            📝 <strong>Заметка:</strong> ${escapeHtml(dialog.note)}
+                        </div>` : ''}
+
+                        <div class="dialog-actions">
+                            <div class="action-group">
+                                <label>👤 Ответственный:</label>
+                                <select id="manager-${dialog.id}">
+                                    <option value="">Не назначен</option>
+                                    ${managers.map(m => `<option value="${m}" ${dialog.manager === m ? 'selected' : ''}>${m}</option>`).join('')}
+                                </select>
+                            </div>
+
+                            <div class="action-group">
+                                <label>📝 Заметка:</label>
+                                <textarea id="note-${dialog.id}" placeholder="Комментарий...">${dialog.note || ''}</textarea>
+                            </div>
+
+                            <div class="action-buttons">
+                                <button class="btn btn-chat" onclick="openChat('${dialog.chat_link}')">💬 Открыть чат</button>
+                                ${dialog.status !== 'in-progress' ? `<button class="btn btn-take" onclick="updateStatus(${dialog.id}, 'in-progress')">🟡 Взять в работу</button>` : ''}
+                                ${dialog.status !== 'task' ? `<button class="btn btn-task" onclick="updateStatus(${dialog.id}, 'task')">🟢 Поставить задачу</button>` : ''}
+                                ${dialog.status !== 'done' ? `<button class="btn btn-done" onclick="updateStatus(${dialog.id}, 'done')">✅ Решено</button>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Обновление статуса
+        async function updateStatus(dialogId, status) {
+            const manager = document.getElementById(`manager-${dialogId}`).value;
+            const note = document.getElementById(`note-${dialogId}`).value;
+
+            try {
+                await fetch('/api/update_status', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        dialog_id: dialogId,
+                        status: status,
+                        manager: manager,
+                        note: note
+                    })
+                });
+
+                console.log('✅ Статус обновлен');
+            } catch (e) {
+                console.error('Ошибка обновления статуса:', e);
+                alert('Ошибка обновления статуса');
+            }
+        }
+
+        // Открыть чат
+        function openChat(link) {
+            window.open(link, '_blank');
+        }
+
+        // Фильтры
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter = btn.dataset.filter;
+                renderDialogs();
+            });
+        });
+
+        // Звук alert
+        let alertSound = null;
+        try {
+            alertSound = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+            console.log('Звук недоступен');
+        }
+
+        function playAlertSound() {
+            if (!alertSound) return;
+
+            function beep(freq, dur, vol) {
+                const osc = alertSound.createOscillator();
+                const gain = alertSound.createGain();
+                osc.connect(gain);
+                gain.connect(alertSound.destination);
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(vol, alertSound.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, alertSound.currentTime + dur);
+                osc.start(alertSound.currentTime);
+                osc.stop(alertSound.currentTime + dur);
+            }
+
+            beep(1200, 0.3, 0.5);
+            setTimeout(() => beep(800, 0.3, 0.5), 300);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Загрузка при старте
+        loadDialogs();
+    </script>
+</body>
+</html>
