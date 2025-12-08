@@ -498,6 +498,8 @@
 
         <!-- Фильтры -->
         <div class="filters">
+            <button class="filter-btn" id="today-filter" onclick="toggleTodayFilter()" style="font-weight: 600; border: 2px solid #0066cc; background: #0066cc; color: white;">📅 Только сегодня</button>
+
             <button class="filter-btn active" data-filter="all">Все</button>
             <button class="filter-btn" data-filter="new">Новые</button>
             <button class="filter-btn" data-filter="in-progress">В работе</button>
@@ -529,6 +531,7 @@
         let currentFilter = 'all';
         let dateFrom = null;
         let dateTo = null;
+        let showOnlyToday = true; // По умолчанию показываем только сегодняшние
         const managers = {{ managers|tojson }};
 
         // Подключение
@@ -589,8 +592,19 @@
 
             // Фильтрация
             let filtered = allDialogs;
+
+            // Фильтр "Только сегодня"
+            if (showOnlyToday) {
+                const today = new Date().toLocaleDateString('ru-RU').split('.').reverse().join('-');
+                filtered = filtered.filter(d => {
+                    const dialogDate = parseDate(d.date);
+                    const dialogDateStr = dialogDate.toISOString().split('T')[0];
+                    return dialogDateStr === today;
+                });
+            }
+
             if (currentFilter !== 'all') {
-                filtered = allDialogs.filter(d => d.status === currentFilter);
+                filtered = filtered.filter(d => d.status === currentFilter);
             }
 
             if (dateFrom || dateTo) {
@@ -718,6 +732,23 @@
 
         function openChat(link) {
             window.open(link, '_blank');
+        }
+
+        function toggleTodayFilter() {
+            showOnlyToday = !showOnlyToday;
+            const btn = document.getElementById('today-filter');
+            if (showOnlyToday) {
+                btn.textContent = '📅 Только сегодня';
+                btn.style.background = '#0066cc';
+                btn.style.color = 'white';
+                btn.style.borderColor = '#0066cc';
+            } else {
+                btn.textContent = '📅 Показать все';
+                btn.style.background = 'white';
+                btn.style.color = '#657786';
+                btn.style.borderColor = '#e1e8ed';
+            }
+            renderDialogs();
         }
 
         function applyDateFilter() {
