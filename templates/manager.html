@@ -329,6 +329,97 @@
             margin-bottom: 4px;
         }
 
+        /* 🤖 AI Анализ */
+        .analysis-block {
+            background: #f0f7ff;
+            border: 1px solid #d6e9ff;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+
+        .analysis-header {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .analysis-emotion {
+            font-size: 16px;
+            font-weight: 600;
+            padding: 6px 12px;
+            background: white;
+            border-radius: 20px;
+            border: 1px solid #d6e9ff;
+        }
+
+        .analysis-intro {
+            font-size: 13px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 20px;
+        }
+
+        .analysis-intro.intro-yes {
+            background: #e8f5e9;
+            color: #17bf63;
+            border: 1px solid #c8e6c9;
+        }
+
+        .analysis-intro.intro-no {
+            background: #ffe5ec;
+            color: #e0245e;
+            border: 1px solid #ffcdd2;
+        }
+
+        .analysis-warnings {
+            background: #fff9e6;
+            border-left: 3px solid #ffda44;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+
+        .warning-item {
+            font-size: 14px;
+            color: #b87600;
+            font-weight: 600;
+            margin: 4px 0;
+        }
+
+        .analysis-recommendations {
+            background: white;
+            border: 1px solid #d6e9ff;
+            padding: 12px;
+            border-radius: 6px;
+        }
+
+        .rec-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #0066cc;
+            margin-bottom: 8px;
+        }
+
+        .rec-item {
+            font-size: 13px;
+            color: #14171a;
+            margin: 4px 0;
+            padding-left: 8px;
+        }
+
+        /* Критичные диалоги */
+        .dialog-card.critical {
+            border-left: 4px solid #e0245e !important;
+            animation: pulse-critical 2s infinite;
+        }
+
+        @keyframes pulse-critical {
+            0%, 100% { box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+            50% { box-shadow: 0 4px 16px rgba(224, 36, 94, 0.25); }
+        }
+
         .dialog-actions {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -599,8 +690,52 @@
                     messagesHtml += '</div>';
                 }
 
+                // 🤖 Блок AI анализа
+                let analysisHtml = '';
+                if (dialog.client_emotion || dialog.warnings || dialog.recommendations) {
+                    analysisHtml = '<div class="analysis-block">';
+
+                    // Верхняя строка: настроение + представление
+                    analysisHtml += '<div class="analysis-header">';
+                    if (dialog.client_emotion) {
+                        analysisHtml += `<span class="analysis-emotion">${dialog.client_emotion}</span>`;
+                    }
+                    if (dialog.introduced !== undefined) {
+                        const introIcon = dialog.introduced ? '✅' : '❌';
+                        const introText = dialog.introduced
+                            ? `Представился: ${dialog.manager_name || 'да'}`
+                            : 'Не представился';
+                        const introClass = dialog.introduced ? 'intro-yes' : 'intro-no';
+                        analysisHtml += `<span class="analysis-intro ${introClass}">${introIcon} ${introText}</span>`;
+                    }
+                    analysisHtml += '</div>';
+
+                    // Предупреждения
+                    if (dialog.warnings && dialog.warnings.length > 0) {
+                        analysisHtml += '<div class="analysis-warnings">';
+                        dialog.warnings.forEach(warning => {
+                            analysisHtml += `<div class="warning-item">${warning}</div>`;
+                        });
+                        analysisHtml += '</div>';
+                    }
+
+                    // Рекомендации
+                    if (dialog.recommendations && dialog.recommendations.length > 0) {
+                        analysisHtml += '<div class="analysis-recommendations">';
+                        analysisHtml += '<div class="rec-title">💡 Рекомендации:</div>';
+                        dialog.recommendations.forEach(rec => {
+                            analysisHtml += `<div class="rec-item">• ${rec}</div>`;
+                        });
+                        analysisHtml += '</div>';
+                    }
+
+                    analysisHtml += '</div>';
+                }
+
+                const criticalClass = dialog.is_critical ? 'critical' : '';
+
                 html += `
-                    <div class="dialog-card ${dialog.status}">
+                    <div class="dialog-card ${dialog.status} ${criticalClass}">
                         <div class="dialog-header">
                             <div class="dialog-title-group">
                                 <div class="dialog-name">${escapeHtml(dialog.name)}</div>
@@ -616,6 +751,8 @@
                         </div>
 
                         ${messagesHtml}
+
+                        ${analysisHtml}
 
                         ${dialog.note ? `<div class="dialog-note"><strong>📝 Заметка:</strong>${escapeHtml(dialog.note)}</div>` : ''}
 

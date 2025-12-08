@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError
+from sentiment_analyzer import analyzer as sentiment_analyzer
 
 load_dotenv()
 
@@ -203,6 +204,9 @@ class DialogScanner:
                     else:
                         chat_link = f"tg://openmessage?user_id={entity.id}"
 
+                    # 🤖 AI АНАЛИЗ ДИАЛОГА
+                    analysis = sentiment_analyzer.analyze_dialog(recent_messages, hours_ago)
+
                     unanswered.append({
                         'id': entity.id,
                         'name': name,
@@ -212,7 +216,19 @@ class DialogScanner:
                         'messages': recent_messages,  # История последних 3
                         'hours_ago': round(hours_ago, 1),
                         'chat_link': chat_link,
-                        'timestamp': last_msg.date.timestamp()
+                        'timestamp': last_msg.date.timestamp(),
+                        # Данные анализа
+                        'sentiment': analysis['sentiment'],
+                        'sentiment_score': analysis['sentiment_score'],
+                        'client_emotion': analysis['client_emotion'],
+                        'urgency': analysis['urgency'],
+                        'issues': analysis['issues'],
+                        'introduced': analysis['introduced'],
+                        'manager_name': analysis['manager_name'],
+                        'greeting': analysis['greeting'],
+                        'is_critical': analysis['is_critical'],
+                        'warnings': analysis['warnings'],
+                        'recommendations': analysis['recommendations']
                     })
 
             logger.info(f"📊 Найдено неотвеченных диалогов: {len(unanswered)}")
