@@ -284,7 +284,6 @@
                 <div class="nav-tabs">
                     <a href="/manager" class="nav-tab">Диалоги</a>
                     <a href="/analytics" class="nav-tab active">Аналитика</a>
-                    <a href="/messages" class="nav-tab">Уведомления</a>
                 </div>
                 <div class="status">
                     <span class="status-dot" id="status-dot"></span>
@@ -321,20 +320,79 @@
             </div>
         </div>
 
-        <div class="charts-grid">
-            <div class="chart-card">
-                <div class="chart-title">Распределение времени ответа</div>
-                <canvas id="responseTimeChart"></canvas>
-            </div>
-
-            <div class="chart-card">
-                <div class="chart-title">Качество обслуживания</div>
-                <canvas id="qualityChart"></canvas>
-            </div>
-        </div>
-
         <div class="details-section">
-            <div class="section-title">Детальный анализ диалогов</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div class="section-title">Детальный анализ диалогов</div>
+                <a href="/api/export_analytics_csv" download style="padding: 12px 24px; background: #10b981; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; gap: 8px;">
+                    📊 Скачать сводку для руководства
+                </a>
+            </div>
+            
+            <!-- Панель фильтров -->
+            <div style="background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                    <div>
+                        <label style="display: block; font-size: 13px; font-weight: 600; color: #657786; margin-bottom: 8px;">
+                            Качество ответа:
+                        </label>
+                        <select id="filter-quality" style="width: 100%; padding: 10px; border: 1px solid #e1e8ed; border-radius: 8px; font-size: 14px;">
+                            <option value="">Все</option>
+                            <option value="отлично">Отлично (<15 мин)</option>
+                            <option value="хорошо">Хорошо (15-30 мин)</option>
+                            <option value="приемлемо">Приемлемо (30-60 мин)</option>
+                            <option value="долго">Долго (1-1.5ч)</option>
+                            <option value="очень_долго">Очень долго (>1.5ч)</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label style="display: block; font-size: 13px; font-weight: 600; color: #657786; margin-bottom: 8px;">
+                            Представился:
+                        </label>
+                        <select id="filter-introduced" style="width: 100%; padding: 10px; border: 1px solid #e1e8ed; border-radius: 8px; font-size: 14px;">
+                            <option value="">Все</option>
+                            <option value="true">Да</option>
+                            <option value="false">Нет</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label style="display: block; font-size: 13px; font-weight: 600; color: #657786; margin-bottom: 8px;">
+                            Оценка AI:
+                        </label>
+                        <select id="filter-score" style="width: 100%; padding: 10px; border: 1px solid #e1e8ed; border-radius: 8px; font-size: 14px;">
+                            <option value="">Все</option>
+                            <option value="high">Высокая (8-10)</option>
+                            <option value="medium">Средняя (5-7)</option>
+                            <option value="low">Низкая (1-4)</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label style="display: block; font-size: 13px; font-weight: 600; color: #657786; margin-bottom: 8px;">
+                            Сортировка:
+                        </label>
+                        <select id="sort-by" style="width: 100%; padding: 10px; border: 1px solid #e1e8ed; border-radius: 8px; font-size: 14px;">
+                            <option value="time-desc">Время (новые)</option>
+                            <option value="time-asc">Время (старые)</option>
+                            <option value="response-asc">Быстрый ответ</option>
+                            <option value="response-desc">Медленный ответ</option>
+                            <option value="score-desc">Высокая оценка</option>
+                            <option value="score-asc">Низкая оценка</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 15px; display: flex; gap: 10px;">
+                    <button onclick="applyFilters()" style="flex: 1; padding: 12px; background: #1da1f2; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px;">
+                        Применить фильтры
+                    </button>
+                    <button onclick="resetFilters()" style="padding: 12px 24px; background: #e1e8ed; color: #14171a; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px;">
+                        Сбросить
+                    </button>
+                </div>
+            </div>
+            
             <div id="dialogDetails">
                 <div class="no-data">Загрузка данных...</div>
             </div>
@@ -346,9 +404,6 @@
             transports: ['websocket', 'polling'],
             reconnection: true
         });
-
-        let responseTimeChart = null;
-        let qualityChart = null;
 
         socket.on('connect', () => {
             console.log('✅ Подключено');
@@ -383,99 +438,15 @@
             const dialogs = data.dialogs;
 
             document.getElementById('stat-total').textContent = stats.total_dialogs;
-            document.getElementById('stat-avg-time').textContent = stats.avg_response_time_hours ? `${stats.avg_response_time_hours}ч` : '-';
-            document.getElementById('stat-avg-desc').textContent = stats.avg_response_time_minutes ? `${stats.avg_response_time_minutes} минут` : 'Нет данных';
+            document.getElementById('stat-avg-time').textContent = stats.avg_response_time_minutes ? `${stats.avg_response_time_minutes} мин` : '-';
+            document.getElementById('stat-avg-desc').textContent = stats.avg_response_time_minutes ? `${stats.avg_response_time_minutes} минут (рабочее время 8:00-16:00)` : 'Нет данных';
             
             document.getElementById('stat-overtime').textContent = stats.overtime_count;
             document.getElementById('stat-overtime-desc').textContent = `${stats.overtime_percentage}% от общего числа`;
 
             document.getElementById('stat-introduced').textContent = `${stats.introduced_percentage}%`;
 
-            renderCharts(stats);
             renderDialogDetails(dialogs);
-        }
-
-        function renderCharts(stats) {
-            const qualityDist = stats.quality_distribution || {};
-
-            const qualityLabels = {
-                'отлично': 'Отлично (<15 мин)',
-                'хорошо': 'Хорошо (15-30 мин)',
-                'приемлемо': 'Приемлемо (30-60 мин)',
-                'долго': 'Долго (1-1.5ч)',
-                'очень_долго': 'Очень долго (>1.5ч)',
-                'нет_ответа': 'Нет ответа'
-            };
-
-            const qualityColors = {
-                'отлично': '#10b981',
-                'хорошо': '#34d399',
-                'приемлемо': '#fbbf24',
-                'долго': '#fb923c',
-                'очень_долго': '#ef4444',
-                'нет_ответа': '#6b7280'
-            };
-
-            const labels = Object.keys(qualityDist).map(k => qualityLabels[k] || k);
-            const values = Object.values(qualityDist);
-            const colors = Object.keys(qualityDist).map(k => qualityColors[k] || '#6b7280');
-
-            if (responseTimeChart) responseTimeChart.destroy();
-            if (qualityChart) qualityChart.destroy();
-
-            const ctx1 = document.getElementById('responseTimeChart').getContext('2d');
-            responseTimeChart = new Chart(ctx1, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Количество диалогов',
-                        data: values,
-                        backgroundColor: colors,
-                        borderRadius: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                stepSize: 1
-                            }
-                        }
-                    }
-                }
-            });
-
-            const ctx2 = document.getElementById('qualityChart').getContext('2d');
-            qualityChart = new Chart(ctx2, {
-                type: 'doughnut',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: values,
-                        backgroundColor: colors,
-                        borderWidth: 2,
-                        borderColor: '#fff'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
-                        }
-                    }
-                }
-            });
         }
 
         function renderDialogDetails(dialogs) {
@@ -524,10 +495,9 @@
                         <div class="metric-row">
                             <div class="metric-item">
                                 <span class="metric-icon">⏱️</span>
-                                <span class="metric-label">Время ответа:</span>
+                                <span class="metric-label">Время ответа (раб. время):</span>
                                 <span class="metric-value">
-                                    ${dialog.response_delay_hours ? `${dialog.response_delay_hours}ч` : 
-                                      dialog.response_delay_minutes ? `${dialog.response_delay_minutes} мин` : '-'}
+                                    ${dialog.response_delay_working_minutes ? `${dialog.response_delay_working_minutes} мин` : '-'}
                                 </span>
                             </div>
 
@@ -552,13 +522,115 @@
                         </div>
 
                         ${dialog.professionalism_score ? `
-                            <div style="margin-top: 12px; padding: 12px; background: white; border-radius: 6px;">
-                                <span style="font-size: 13px; color: #657786; font-weight: 600;">
-                                    Оценка профессионализма: 
-                                </span>
-                                <span style="font-size: 16px; font-weight: 700; color: ${dialog.professionalism_score >= 8 ? '#17bf63' : dialog.professionalism_score >= 6 ? '#fbbf24' : '#ef4444'}">
-                                    ${dialog.professionalism_score}/10
-                                </span>
+                            <div style="margin-top: 12px; padding: 12px; background: white; border-radius: 6px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
+                                <div>
+                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Профессионализм:</span>
+                                    <span style="font-size: 16px; font-weight: 700; color: ${dialog.professionalism_score >= 8 ? '#17bf63' : dialog.professionalism_score >= 6 ? '#fbbf24' : '#ef4444'}">
+                                        ${dialog.professionalism_score}/10
+                                    </span>
+                                </div>
+                                ${dialog.politeness_score ? `
+                                <div>
+                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Вежливость:</span>
+                                    <span style="font-size: 14px; font-weight: 600;">${dialog.politeness_score}/10</span>
+                                </div>
+                                ` : ''}
+                                ${dialog.clarity_score ? `
+                                <div>
+                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Ясность:</span>
+                                    <span style="font-size: 14px; font-weight: 600;">${dialog.clarity_score}/10</span>
+                                </div>
+                                ` : ''}
+                                ${dialog.proactivity_score ? `
+                                <div>
+                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Проактивность:</span>
+                                    <span style="font-size: 14px; font-weight: 600;">${dialog.proactivity_score}/10</span>
+                                </div>
+                                ` : ''}
+                                ${dialog.responsiveness_score ? `
+                                <div>
+                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Скорость реакции:</span>
+                                    <span style="font-size: 14px; font-weight: 600;">${dialog.responsiveness_score}/10</span>
+                                </div>
+                                ` : ''}
+                                ${dialog.empathy_score ? `
+                                <div>
+                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Эмпатия:</span>
+                                    <span style="font-size: 14px; font-weight: 600;">${dialog.empathy_score}/10</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+
+                        ${dialog.main_topic || dialog.urgency_level || dialog.emotion_dynamics ? `
+                            <div style="margin-top: 12px; padding: 12px; background: #fefce8; border-radius: 6px; border-left: 3px solid #eab308;">
+                                ${dialog.main_topic ? `
+                                <div style="font-size: 13px; margin-bottom: 6px;">
+                                    <span style="color: #657786; font-weight: 600;">Тема запроса:</span>
+                                    <span style="color: #14171a;">${dialog.main_topic}</span>
+                                </div>
+                                ` : ''}
+                                ${dialog.urgency_level ? `
+                                <div style="font-size: 13px; margin-bottom: 6px;">
+                                    <span style="color: #657786; font-weight: 600;">Срочность:</span>
+                                    <span style="color: #14171a;">${dialog.urgency_level === 'critical' ? '🔴 критическая' : dialog.urgency_level === 'high' ? '🟠 высокая' : dialog.urgency_level === 'medium' ? '🟡 средняя' : '🟢 низкая'}</span>
+                                </div>
+                                ` : ''}
+                                ${dialog.emotion_dynamics ? `
+                                <div style="font-size: 13px;">
+                                    <span style="color: #657786; font-weight: 600;">Динамика эмоций:</span>
+                                    <span style="color: #14171a;">${dialog.emotion_dynamics}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        ` : ''}
+
+                        ${dialog.key_moments && dialog.key_moments.length > 0 ? `
+                            <div style="margin-top: 12px; padding: 12px; background: #f0f9ff; border-radius: 6px; border-left: 3px solid #0284c7;">
+                                <div style="font-size: 13px; color: #0284c7; font-weight: 600; margin-bottom: 8px;">
+                                    📌 Ключевые моменты:
+                                </div>
+                                ${dialog.key_moments.map(m => `<div style="font-size: 13px; color: #14171a; margin: 4px 0;">• ${m}</div>`).join('')}
+                            </div>
+                        ` : ''}
+
+                        ${dialog.ai_strengths && dialog.ai_strengths.length > 0 ? `
+                            <div style="margin-top: 12px; padding: 12px; background: #f0fdf4; border-radius: 6px; border-left: 3px solid #10b981;">
+                                <div style="font-size: 13px; color: #10b981; font-weight: 600; margin-bottom: 8px;">
+                                    ✅ Сильные стороны:
+                                </div>
+                                ${dialog.ai_strengths.map(s => `<div style="font-size: 13px; color: #14171a; margin: 4px 0;">• ${s}</div>`).join('')}
+                            </div>
+                        ` : ''}
+
+                        ${dialog.ai_key_issues && dialog.ai_key_issues.length > 0 ? `
+                            <div style="margin-top: 12px; padding: 12px; background: #fef2f2; border-radius: 6px; border-left: 3px solid #ef4444;">
+                                <div style="font-size: 13px; color: #ef4444; font-weight: 600; margin-bottom: 8px;">
+                                    ⚠️ Проблемы:
+                                </div>
+                                ${dialog.ai_key_issues.map(i => `<div style="font-size: 13px; color: #14171a; margin: 4px 0;">• ${i}</div>`).join('')}
+                            </div>
+                        ` : ''}
+
+                        ${dialog.missed_opportunities && dialog.missed_opportunities.length > 0 ? `
+                            <div style="margin-top: 12px; padding: 12px; background: #fef3c7; border-radius: 6px; border-left: 3px solid #f59e0b;">
+                                <div style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-bottom: 8px;">
+                                    💡 Упущенные возможности:
+                                </div>
+                                ${dialog.missed_opportunities.map(o => `<div style="font-size: 13px; color: #14171a; margin: 4px 0;">• ${o}</div>`).join('')}
+                            </div>
+                        ` : ''}
+
+                        ${dialog.risk_level || dialog.churn_risk_level ? `
+                            <div style="margin-top: 12px; padding: 12px; background: ${dialog.risk_level === 'high' || dialog.risk_level === 'critical' ? '#fef2f2' : '#f0fdf4'}; border-radius: 6px; border-left: 3px solid ${dialog.risk_level === 'high' || dialog.risk_level === 'critical' ? '#ef4444' : '#10b981'};">
+                                <div style="font-size: 13px; font-weight: 600; margin-bottom: 4px;">
+                                    ${dialog.risk_level === 'high' || dialog.risk_level === 'critical' ? '⚠️' : '✅'} 
+                                    Риск: ${dialog.risk_level || 'low'} 
+                                    ${dialog.churn_risk_level ? ` | Риск ухода: ${dialog.churn_risk_level}` : ''}
+                                </div>
+                                ${dialog.resolution_status ? `
+                                <div style="font-size: 12px; color: #657786;">Статус: ${dialog.resolution_status}</div>
+                                ` : ''}
                             </div>
                         ` : ''}
 
@@ -581,6 +653,83 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // Глобальное хранилище данных
+        let allDialogsData = [];
+
+        // Обновленная загрузка аналитики
+        function loadAnalytics() {
+            fetch('/api/analytics')
+                .then(res => res.json())
+                .then(data => {
+                    allDialogsData = data.dialogs;
+                    renderAnalytics(data);
+                })
+                .catch(err => console.error('Ошибка загрузки:', err));
+        }
+
+        // Применить фильтры
+        function applyFilters() {
+            const quality = document.getElementById('filter-quality').value;
+            const introduced = document.getElementById('filter-introduced').value;
+            const score = document.getElementById('filter-score').value;
+            const sortBy = document.getElementById('sort-by').value;
+
+            let filtered = [...allDialogsData];
+
+            // Фильтр по качеству
+            if (quality) {
+                filtered = filtered.filter(d => d.response_quality === quality);
+            }
+
+            // Фильтр по представлению
+            if (introduced) {
+                const isIntroduced = introduced === 'true';
+                filtered = filtered.filter(d => d.introduced === isIntroduced);
+            }
+
+            // Фильтр по оценке AI
+            if (score) {
+                filtered = filtered.filter(d => {
+                    const s = d.professionalism_score || 0;
+                    if (score === 'high') return s >= 8;
+                    if (score === 'medium') return s >= 5 && s < 8;
+                    if (score === 'low') return s < 5;
+                    return true;
+                });
+            }
+
+            // Сортировка
+            filtered.sort((a, b) => {
+                switch(sortBy) {
+                    case 'time-desc':
+                        return (b.timestamp || 0) - (a.timestamp || 0);
+                    case 'time-asc':
+                        return (a.timestamp || 0) - (b.timestamp || 0);
+                    case 'response-asc':
+                        return (a.response_delay_working_minutes || 999) - (b.response_delay_working_minutes || 999);
+                    case 'response-desc':
+                        return (b.response_delay_working_minutes || 0) - (a.response_delay_working_minutes || 0);
+                    case 'score-desc':
+                        return (b.professionalism_score || 0) - (a.professionalism_score || 0);
+                    case 'score-asc':
+                        return (a.professionalism_score || 0) - (b.professionalism_score || 0);
+                    default:
+                        return 0;
+                }
+            });
+
+            renderDialogDetails(filtered);
+        }
+
+        // Сбросить фильтры
+        function resetFilters() {
+            document.getElementById('filter-quality').value = '';
+            document.getElementById('filter-introduced').value = '';
+            document.getElementById('filter-score').value = '';
+            document.getElementById('sort-by').value = 'time-desc';
+            renderDialogDetails(allDialogsData);
         }
 
         loadAnalytics();

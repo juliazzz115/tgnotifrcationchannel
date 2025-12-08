@@ -567,7 +567,6 @@
                 <div class="nav-tabs">
                     <a href="/manager" class="nav-tab active">Диалоги</a>
                     <a href="/analytics" class="nav-tab">Аналитика</a>
-                    <a href="/messages" class="nav-tab">Уведомления</a>
                 </div>
                 <div class="status">
                     <span class="status-dot" id="status-dot"></span>
@@ -696,7 +695,9 @@
 
             let html = '';
             filtered.forEach(dialog => {
-                const urgentClass = dialog.hours_ago > 2 ? 'urgent' : '';
+                // Время ожидания в минутах (рабочее время)
+                const waitingMinutes = dialog.waiting_first_response_minutes || 0;
+                const urgentClass = waitingMinutes > 60 ? 'urgent' : '';
                 const statusText = {
                     'new': 'Новый',
                     'task': 'Задача',
@@ -724,7 +725,7 @@
 
                 // 🤖 Блок AI анализа
                 let analysisHtml = '';
-                if (dialog.client_emotion || dialog.warnings || dialog.recommendations) {
+                if (dialog.client_emotion || dialog.recommendations) {
                     analysisHtml = '<div class="analysis-block">';
 
                     // Верхняя строка: настроение + представление
@@ -742,16 +743,7 @@
                     }
                     analysisHtml += '</div>';
 
-                    // Предупреждения
-                    if (dialog.warnings && dialog.warnings.length > 0) {
-                        analysisHtml += '<div class="analysis-warnings">';
-                        dialog.warnings.forEach(warning => {
-                            analysisHtml += `<div class="warning-item">${warning}</div>`;
-                        });
-                        analysisHtml += '</div>';
-                    }
-
-                    // Рекомендации
+                    // Рекомендации (warnings убраны)
                     if (dialog.recommendations && dialog.recommendations.length > 0) {
                         analysisHtml += '<div class="analysis-recommendations">';
                         analysisHtml += '<div class="rec-title">💡 Рекомендации:</div>';
@@ -778,7 +770,7 @@
                             </div>
                             <div class="dialog-time-info">
                                 <div class="dialog-date">${dialog.time} | ${dialog.date}</div>
-                                <div class="time-ago ${urgentClass}">⏱️ ${dialog.hours_ago}ч без ответа</div>
+                                <div class="time-ago ${urgentClass}">⏱️ ${waitingMinutes} мин без ответа (рабочее время)</div>
                             </div>
                         </div>
 

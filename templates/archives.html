@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Архивы аналитики</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+        }
+
+        .header {
+            background: white;
+            border-bottom: 1px solid #e1e8ed;
+            padding: 20px 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 600;
+            color: #0066cc;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .nav-tab {
+            padding: 10px 20px;
+            background: white;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #657786;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .nav-tab:hover {
+            border-color: #0066cc;
+            color: #0066cc;
+        }
+
+        .nav-tab.active {
+            background: #0066cc;
+            color: white;
+            border-color: #0066cc;
+        }
+
+        .main-content {
+            padding: 30px 0;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: #14171a;
+        }
+
+        .page-subtitle {
+            font-size: 16px;
+            color: #657786;
+            margin-bottom: 30px;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border-left: 4px solid #0066cc;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+
+        .info-box h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #0066cc;
+            margin-bottom: 8px;
+        }
+
+        .info-box p {
+            font-size: 14px;
+            color: #14171a;
+            line-height: 1.6;
+            margin: 4px 0;
+        }
+
+        .action-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            background: #0052a3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,102,204,0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: #657786;
+        }
+
+        .btn-secondary:hover {
+            background: #4a5a6a;
+        }
+
+        .archives-grid {
+            display: grid;
+            gap: 16px;
+        }
+
+        .archive-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+        }
+
+        .archive-card:hover {
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+        }
+
+        .archive-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+
+        .archive-date {
+            font-size: 18px;
+            font-weight: 700;
+            color: #14171a;
+        }
+
+        .archive-badge {
+            padding: 4px 12px;
+            background: #eff6ff;
+            color: #0066cc;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .archive-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .info-item {
+            font-size: 14px;
+        }
+
+        .info-label {
+            color: #657786;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            color: #14171a;
+            font-weight: 600;
+        }
+
+        .archive-actions {
+            display: flex;
+            gap: 12px;
+            padding-top: 16px;
+            border-top: 1px solid #e1e8ed;
+        }
+
+        .download-btn {
+            flex: 1;
+            padding: 10px 16px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .download-btn:hover {
+            background: #0052a3;
+        }
+
+        .download-btn.csv {
+            background: #10b981;
+        }
+
+        .download-btn.csv:hover {
+            background: #059669;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #657786;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .empty-state-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .empty-state-text {
+            font-size: 14px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #657786;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">📊 Telegram Alerts</div>
+                <div class="nav-tabs">
+                    <a href="/manager" class="nav-tab">Диалоги</a>
+                    <a href="/analytics" class="nav-tab">Аналитика</a>
+                    <a href="/archives" class="nav-tab active">Архивы</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="main-content">
+            <h1 class="page-title">📁 Архивы аналитики</h1>
+            <p class="page-subtitle">История данных по дням для руководства</p>
+
+            <div class="info-box">
+                <h3>ℹ️ Информация об архивации</h3>
+                <p><strong>Автоматическое сохранение:</strong> Каждый день в 7:00 утра данные за предыдущий день автоматически сохраняются в архив</p>
+                <p><strong>Хранение:</strong> Архивы хранятся 30 дней, после чего автоматически удаляются</p>
+                <p><strong>Форматы:</strong> JSON (полные данные) и CSV (для Excel)</p>
+                <p><strong>Очистка данных:</strong> После архивации данные обнуляются, и система готова к новому рабочему дню</p>
+            </div>
+
+            <div class="action-bar">
+                <div style="font-size: 16px; color: #657786;">
+                    <span id="archives-count">Загрузка...</span>
+                </div>
+                <button class="btn" onclick="createArchiveNow()">Создать архив сейчас</button>
+            </div>
+
+            <div id="archives-container" class="loading">
+                Загрузка архивов...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function loadArchives() {
+            fetch('/api/archives/list')
+                .then(res => res.json())
+                .then(data => {
+                    const container = document.getElementById('archives-container');
+                    const archives = data.archives || [];
+
+                    document.getElementById('archives-count').textContent = 
+                        `Всего архивов: ${archives.length}`;
+
+                    if (archives.length === 0) {
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📂</div>
+                                <div class="empty-state-title">Нет архивов</div>
+                                <div class="empty-state-text">
+                                    Архивы будут создаваться автоматически каждый день в 7:00<br>
+                                    или создайте архив вручную, нажав кнопку выше
+                                </div>
+                            </div>
+                        `;
+                        container.className = 'empty-state';
+                    } else {
+                        container.className = 'archives-grid';
+                        container.innerHTML = archives.map(archive => `
+                            <div class="archive-card">
+                                <div class="archive-header">
+                                    <div class="archive-date">📅 ${formatDate(archive.date)}</div>
+                                    <div class="archive-badge">${archive.dialogs_count} диалогов</div>
+                                </div>
+                                <div class="archive-info">
+                                    <div class="info-item">
+                                        <div class="info-label">JSON файл</div>
+                                        <div class="info-value">${archive.json_size}</div>
+                                    </div>
+                                    <div class="info-item">
+                                        <div class="info-label">CSV файл</div>
+                                        <div class="info-value">${archive.csv_size || 'н/д'}</div>
+                                    </div>
+                                </div>
+                                <div class="archive-actions">
+                                    <a href="/api/archives/download/${archive.json_file}" 
+                                       class="download-btn" download>
+                                        📄 Скачать JSON
+                                    </a>
+                                    ${archive.csv_file ? `
+                                        <a href="/api/archives/download/${archive.csv_file}" 
+                                           class="download-btn csv" download>
+                                            📊 Скачать CSV
+                                        </a>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `).join('');
+                    }
+                })
+                .catch(err => {
+                    console.error('Ошибка загрузки:', err);
+                    document.getElementById('archives-container').innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">❌</div>
+                            <div class="empty-state-title">Ошибка загрузки</div>
+                            <div class="empty-state-text">${err.message}</div>
+                        </div>
+                    `;
+                });
+        }
+
+        function formatDate(dateStr) {
+            const parts = dateStr.split('-');
+            return `${parts[2]}.${parts[1]}.${parts[0]}`;
+        }
+
+        function createArchiveNow() {
+            if (!confirm('Создать архив с текущими данными?')) {
+                return;
+            }
+
+            fetch('/api/archives/create_now', { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`✅ ${data.message}`);
+                        loadArchives();
+                    } else {
+                        alert(`❌ Ошибка: ${data.error}`);
+                    }
+                })
+                .catch(err => {
+                    alert(`❌ Ошибка: ${err.message}`);
+                });
+        }
+
+        // Загрузка при открытии страницы
+        loadArchives();
+
+        // Обновление каждые 30 секунд
+        setInterval(loadArchives, 30000);
+    </script>
+</body>
+</html>
