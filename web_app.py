@@ -179,10 +179,15 @@ class DialogScanner:
 
                     # Получаем последние 10 сообщений для детального анализа
                     recent_messages = []
+                    has_our_messages = False
+                    
                     try:
                         async for msg in self.client.iter_messages(entity, limit=10):
                             msg_sender = await msg.get_sender()
                             is_from_me = msg_sender and msg_sender.id == me.id if msg_sender else False
+                            
+                            if is_from_me:
+                                has_our_messages = True
 
                             recent_messages.append({
                                 'text': msg.message or '[нет текста]',
@@ -203,6 +208,11 @@ class DialogScanner:
                             'sender_name': name,
                             'timestamp': last_msg.date.timestamp()
                         }]
+                        has_our_messages = False
+                    
+                    # ВАЖНО: Показываем только если мы хотя бы раз отвечали этому человеку
+                    if not has_our_messages:
+                        continue
 
                     # Формируем ссылку на чат
                     chat_link = ""
@@ -214,8 +224,11 @@ class DialogScanner:
                     # 🤖 БАЗОВЫЙ AI АНАЛИЗ
                     analysis = sentiment_analyzer.analyze_dialog(recent_messages, hours_ago)
                     
-                    # 📊 ДЕТАЛЬНЫЙ АНАЛИЗ ВРЕМЕНИ ОТВЕТА
+                    # 📊 ДЕТАЛЬНЫЙ АНАЛИЗ ВРЕМЕНИ ОТВЕТА НА ПЕРВОЕ СООБЩЕНИЕ
                     response_analysis = detailed_analyzer.analyze_response_times(recent_messages)
+                    
+                    # 📊 СРЕДНЕЕ ВРЕМЯ ОТВЕТА НА ВСЕ СООБЩЕНИЯ В ДИАЛОГЕ
+                    all_responses_analysis = detailed_analyzer.analyze_all_response_times(recent_messages)
                     
                     # 👤 АНАЛИЗ ПОВЕДЕНИЯ МЕНЕДЖЕРА
                     manager_analysis = detailed_analyzer.analyze_manager_behavior(recent_messages)
@@ -246,11 +259,17 @@ class DialogScanner:
                         'is_critical': analysis['is_critical'],
                         'warnings': analysis['warnings'],
                         'recommendations': analysis['recommendations'],
-                        # Детальный анализ времени
+                        # Детальный анализ времени ПЕРВОГО ответа
                         'response_delay_minutes': response_analysis.get('response_delay_minutes'),
+                        'response_delay_working_minutes': response_analysis.get('response_delay_working_minutes'),
                         'response_delay_hours': response_analysis.get('response_delay_hours'),
                         'response_quality': response_analysis.get('response_quality'),
                         'is_overtime': response_analysis.get('is_overtime'),
+                        'waiting_first_response_minutes': response_analysis.get('waiting_first_response_minutes'),
+                        # Среднее время ответа на ВСЕ сообщения
+                        'avg_response_time_minutes': all_responses_analysis.get('avg_response_time_minutes'),
+                        'total_client_messages': all_responses_analysis.get('total_client_messages'),
+                        'total_responses': all_responses_analysis.get('total_responses'),
                         # Анализ менеджера
                         'introduced': manager_analysis.get('introduced'),
                         'manager_name': manager_analysis.get('manager_name'),
@@ -260,6 +279,8 @@ class DialogScanner:
                         # Google AI анализ
                         'professionalism_score': ai_analysis.get('professionalism_score'),
                         'ai_suggestions': ai_analysis.get('suggestions', []),
+                        'ai_key_issues': ai_analysis.get('key_issues', []),
+                        'ai_strengths': ai_analysis.get('strengths', []),
                         'response_tone': ai_analysis.get('response_tone'),
                         'greeting_quality': ai_analysis.get('greeting_quality')
                     })
