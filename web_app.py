@@ -201,16 +201,22 @@ class DialogScanner:
                             'sender_name': name
                         }]
 
-                    # Получаем ВСЕ сообщения для расширенного анализа (с timestamp)
+                    # Получаем ВСЕ сообщения за СЕГОДНЯ для расширенного анализа (с timestamp)
                     all_messages_for_analysis = []
                     try:
-                        async for msg in self.client.iter_messages(entity, limit=10):
+                        async for msg in self.client.iter_messages(entity, limit=None):
+                            msg_local_time = msg.date.astimezone(LOCAL_TZ)
+                            
+                            # Фильтр: только сообщения за сегодня
+                            if msg_local_time < today_start:
+                                break
+                            
                             msg_sender = await msg.get_sender()
                             is_from_me = msg_sender and msg_sender.id == me.id if msg_sender else False
 
                             all_messages_for_analysis.append({
                                 'text': msg.message or '[нет текста]',
-                                'time': msg.date.astimezone(LOCAL_TZ).strftime('%H:%M'),
+                                'time': msg_local_time.strftime('%H:%M'),
                                 'from_me': is_from_me,
                                 'sender_name': 'Вы' if is_from_me else name,
                                 'timestamp': msg.date.timestamp()
@@ -240,10 +246,10 @@ class DialogScanner:
                     # 👤 АНАЛИЗ ПОВЕДЕНИЯ МЕНЕДЖЕРА
                     manager_analysis = detailed_analyzer.analyze_manager_behavior(all_messages_for_analysis)
                     
-                    # 🤖 GOOGLE AI АНАЛИЗ (async, но не блокируем)
+                    # 🤖 GOOGLE AI АНАЛИЗ (все сообщения за день)
                     ai_analysis = {}
                     try:
-                        ai_analysis = google_ai_analyzer.analyze_dialog_with_ai(all_messages_for_analysis[:5])
+                        ai_analysis = google_ai_analyzer.analyze_dialog_with_ai(all_messages_for_analysis)
                     except Exception as e:
                         logger.warning(f"Google AI анализ не удался для {name}: {e}")
 
@@ -263,9 +269,9 @@ class DialogScanner:
                         'client_emotion': analysis['client_emotion'],
                         'urgency': analysis['urgency'],
                         'issues': analysis['issues'],
-                        'introduced': analysis.get('introduced'),
-                        'manager_name': analysis.get('manager_name'),
-                        'greeting': analysis.get('greeting'),
+                        'introduced': manager_analysis.get('introduced'),  # Из детального анализа (все сообщения за день)
+                        'manager_name': manager_analysis.get('manager_name'),  # Из детального анализа
+                        'greeting': manager_analysis.get('used_greeting'),  # Из детального анализа
                         'is_critical': analysis['is_critical'],
                         'warnings': analysis['warnings'],
                         'recommendations': analysis['recommendations'],

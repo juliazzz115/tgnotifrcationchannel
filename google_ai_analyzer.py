@@ -14,7 +14,7 @@ class GoogleAIAnalyzer:
 
     def __init__(self, api_key: str = None):
         self.api_key = api_key or os.getenv('GOOGLE_AI_KEY')
-        self.endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+        self.endpoint = "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent"
 
     def analyze_dialog_with_ai(self, messages: List[Dict]) -> Dict:
         """
@@ -156,14 +156,40 @@ class GoogleAIAnalyzer:
             for word in ['здравствуйте', 'добрый', 'привет', 'hello']
         )
         
+        suggestions = []
+        key_issues = []
+        strengths = []
+        
+        if not introduction['introduced']:
+            suggestions.append("Всегда представляйтесь клиенту по имени в начале диалога")
+            key_issues.append("Менеджер не представился")
+        else:
+            strengths.append("Менеджер представился по имени")
+        
+        if not has_greeting:
+            suggestions.append("Начинайте диалог с приветствия (Здравствуйте, Добрый день)")
+            key_issues.append("Отсутствует приветствие")
+        else:
+            strengths.append("Использовано приветствие")
+        
+        if len(manager_messages) > 0:
+            avg_length = sum(len(m['text']) for m in manager_messages) / len(manager_messages)
+            if avg_length < 20:
+                suggestions.append("Давайте более развернутые ответы клиенту")
+                key_issues.append("Слишком короткие ответы")
+        
+        if not suggestions:
+            suggestions.append("Продолжайте работать в том же духе")
+        
         return {
             'manager_introduced': introduction['introduced'],
             'manager_name': introduction['manager_name'],
             'greeting_quality': 'хорошее' if has_greeting else 'отсутствует',
             'response_tone': 'нейтральный',
             'professionalism_score': 7 if introduction['introduced'] else 5,
-            'suggestions': ['Использовать более персонализированный подход'],
-            'key_issues': []
+            'suggestions': suggestions,
+            'key_issues': key_issues,
+            'strengths': strengths
         }
 
 
