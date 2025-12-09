@@ -49,6 +49,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 telegram_client = None
 unanswered_dialogs = []
 all_dialogs_for_analytics = []  # ВСЕ диалоги за день для аналитики
+analyzed_dialogs_cache = {}  # Кэш анализов: {dialog_id: {'timestamp': ..., 'data': {...}}}
 
 # Файл для хранения статусов
 STATUS_FILE = 'dialog_statuses.json'
@@ -430,14 +431,35 @@ class DialogScanner:
                     continue  # Пропускаем если активность была меньше часа назад
                 
                 who_last = "клиент не ответил" if last_from_us else "мы не ответили"
-                logger.info(f"✅ Добавляем в аналитику: {name} ({who_last} {hours_since_last:.1f}ч, всего {len(all_messages_for_analysis)} сообщений)")
+                
+                last_msg_timestamp = all_messages_for_analysis[-1]['timestamp'] if all_messages_for_analysis else 0
+                dialog_id = entity.id
+                
+                # 🔍 ПРОВЕРКА КЭША: анализируем только при новых сообщениях
+                global analyzed_dialogs_cache
+                cached_entry = analyzed_dialogs_cache.get(dialog_id)
+                
+                # Если диалог уже анализирован с тем же timestamp - используем кэш
+                if cached_entry and cached_entry.get('timestamp') == last_msg_timestamp:
+                    logger.info(f"💾 Используем кэш для {name} (timestamp {last_msg_timestamp})")
+                    cached_data = cached_entry.get('data')
+                    if cached_data:
+                        all_dialogs.append(cached_data)
+                        # Отправляем обновление с кэшированными данными
+                        socketio.emit('analytics_update', {
+                            'dialogs': all_dialogs.copy(),
+                            'daily_stats': detailed_analyzer.calculate_daily_stats(all_dialogs)
+                        })
+                    continue
+                
+                logger.info(f"✅ Новый анализ: {name} ({who_last} {hours_since_last:.1f}ч, всего {len(all_messages_for_analysis)} сообщений)")
 
                 # Анализ времени ответа
                 response_analysis = detailed_analyzer.analyze_response_times(all_messages_for_analysis)
                 all_responses_analysis = detailed_analyzer.analyze_all_response_times(all_messages_for_analysis)
                 manager_analysis = detailed_analyzer.analyze_manager_behavior(all_messages_for_analysis)
                 
-                # Google AI анализ - запускаем ВСЕГДА для диалогов >1 час
+                # Google AI анализ - запускаем ТОЛЬКО для новых/измененных диалогов
                 ai_analysis = {}
                 try:
                     ai_analysis = google_ai_analyzer.analyze_dialog_with_ai(all_messages_for_analysis)
@@ -453,7 +475,6 @@ class DialogScanner:
                     chat_link = f"tg://openmessage?user_id={entity.id}"
 
                 last_msg_time = all_messages_for_analysis[-1]['time'] if all_messages_for_analysis else ''
-                last_msg_timestamp = all_messages_for_analysis[-1]['timestamp'] if all_messages_for_analysis else 0
 
                 dialog_data = {
                     'id': entity.id,
@@ -524,6 +545,12 @@ class DialogScanner:
                 }
                 
                 all_dialogs.append(dialog_data)
+                
+                # 💾 СОХРАНЯЕМ В КЭШ: данные + timestamp последнего сообщения
+                analyzed_dialogs_cache[dialog_id] = {
+                    'timestamp': last_msg_timestamp,
+                    'data': dialog_data
+                }
                 
                 # 🚀 РЕАЛ-ТАЙМ ОБНОВЛЕНИЕ: отправляем данные сразу после обработки каждого диалога
                 socketio.emit('analytics_update', {
@@ -644,6 +671,8 @@ class DialogScanner:
                         # Очищаем данные
                         all_dialogs_for_analytics = []
                         unanswered_dialogs = []
+                        analyzed_dialogs_cache = {}  # Очищаем кэш анализов
+                        logger.info("🗑️  Кэш анализов очищен")
                         
                         # Очищаем старые архивы (>30 дней)
                         data_archiver.cleanup_old_archives(keep_days=30)
