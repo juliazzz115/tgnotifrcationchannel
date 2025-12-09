@@ -225,6 +225,11 @@ class GoogleAIAnalyzer:
                 text = text.strip()
                 
                 result = json.loads(text)
+                
+                # Очистка summary от подчёркиваний и других артефактов
+                if 'summary' in result and result['summary']:
+                    result['summary'] = result['summary'].replace('_', ' ')
+                
                 logger.info(f"✅ Google AI анализ выполнен успешно")
                 return result
             else:

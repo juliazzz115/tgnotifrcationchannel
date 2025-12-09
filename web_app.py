@@ -455,7 +455,7 @@ class DialogScanner:
                 last_msg_time = all_messages_for_analysis[-1]['time'] if all_messages_for_analysis else ''
                 last_msg_timestamp = all_messages_for_analysis[-1]['timestamp'] if all_messages_for_analysis else 0
 
-                all_dialogs.append({
+                dialog_data = {
                     'id': entity.id,
                     'name': name,
                     'time': last_msg_time,
@@ -521,7 +521,16 @@ class DialogScanner:
                     'overall_sentiment': ai_analysis.get('overall_sentiment'),
                     'client_state': ai_analysis.get('client_state'),
                     'client_emotion': '😐'
+                }
+                
+                all_dialogs.append(dialog_data)
+                
+                # 🚀 РЕАЛ-ТАЙМ ОБНОВЛЕНИЕ: отправляем данные сразу после обработки каждого диалога
+                socketio.emit('analytics_update', {
+                    'dialogs': all_dialogs.copy(),
+                    'daily_stats': detailed_analyzer.calculate_daily_stats(all_dialogs)
                 })
+                logger.info(f"📤 Отправлено обновление аналитики: {len(all_dialogs)} диалогов (добавлен {name})")
 
             logger.info(f"📊 Собрано диалогов для аналитики: {len(all_dialogs)}")
             return all_dialogs
@@ -609,13 +618,8 @@ class DialogScanner:
                     logger.info("📊 Сбор диалогов для аналитики...")
                     all_dialogs = await self.scan_all_dialogs_for_analytics()
                     all_dialogs_for_analytics = all_dialogs
-                    
-                    # Отправляем обновление аналитики всем клиентам
-                    socketio.emit('analytics_update', {
-                        'dialogs': all_dialogs,
-                        'daily_stats': detailed_analyzer.calculate_daily_stats(all_dialogs)
-                    })
-                    logger.info(f"📤 Отправлено обновление аналитики: {len(all_dialogs)} диалогов")
+                    # Обновления отправляются в реал-тайм внутри scan_all_dialogs_for_analytics
+
 
                 # АРХИВАЦИЯ И ОЧИСТКА ДАННЫХ В 7:00 УТРА
                 now = datetime.now(LOCAL_TZ)

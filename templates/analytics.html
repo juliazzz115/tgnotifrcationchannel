@@ -538,12 +538,13 @@
 <body>
     <div class="header">
         <div class="header-content">
-            <h1>📊 Расширенная Аналитика</h1>
+            <h1>📊 Telegram Alerts</h1>
             <div class="header-actions">
-                <span id="last-update" style="font-size: 13px; color: #657786;"></span>
+                <a href="/manager" class="btn btn-secondary">📋 Диалоги</a>
+                <a href="/analytics" class="btn btn-primary">📊 Аналитика</a>
+                <span id="last-update" style="font-size: 13px; color: #657786; margin-left: 16px;"></span>
                 <button class="btn btn-secondary" onclick="refreshData()">🔄 Обновить</button>
                 <button class="btn btn-primary" onclick="exportData()">📥 Экспорт</button>
-                <a href="/" class="btn btn-secondary">← Назад</a>
             </div>
         </div>
     </div>
@@ -916,11 +917,16 @@
                 const quality = getDialogQuality(dialog);
                 const qualityClass = `quality-${quality}`;
                 const sentiment = dialog.overall_sentiment || dialog.response_tone || 'нейтральное';
+                const chatLink = dialog.chat_link || '#';
 
                 return `
                     <div class="dialog-card ${qualityClass}">
                         <div class="dialog-header">
-                            <div class="dialog-client">${dialog.name || 'Клиент'}</div>
+                            <div class="dialog-client">
+                                <a href="${chatLink}" target="_blank" style="color: inherit; text-decoration: none;">
+                                    ${dialog.name || 'Клиент'} 🔗
+                                </a>
+                            </div>
                             <div class="dialog-time">${dialog.time || ''}</div>
                         </div>
                         
