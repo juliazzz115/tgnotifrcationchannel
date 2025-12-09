@@ -14,7 +14,7 @@ class GoogleAIAnalyzer:
 
     def __init__(self, api_key: str = None):
         self.api_key = api_key or os.getenv('GOOGLE_AI_KEY')
-        self.endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        self.endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
 
     def analyze_dialog_with_ai(self, messages: List[Dict]) -> Dict:
         """
