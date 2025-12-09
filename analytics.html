@@ -480,6 +480,9 @@
 
         function renderDialogDetails(dialogs) {
             const container = document.getElementById('dialogDetails');
+            
+            console.log('📊 Получено диалогов для отображения:', dialogs.length);
+            console.log('Первые 3 диалога:', dialogs.slice(0, 3));
 
             if (!dialogs || dialogs.length === 0) {
                 container.innerHTML = '<div class="no-data">Нет диалогов для анализа</div>';
@@ -497,7 +500,8 @@
                     'хорошо': 'good',
                     'приемлемо': 'acceptable',
                     'долго': 'slow',
-                    'очень_долго': 'very-slow'
+                    'очень_долго': 'very-slow',
+                    'нет_ответа': 'slow'
                 }[dialog.response_quality] || 'acceptable';
 
                 const qualityText = {
