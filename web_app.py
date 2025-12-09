@@ -407,12 +407,23 @@ class DialogScanner:
                 all_responses_analysis = detailed_analyzer.analyze_all_response_times(all_messages_for_analysis)
                 manager_analysis = detailed_analyzer.analyze_manager_behavior(all_messages_for_analysis)
                 
-                # Google AI анализ
+                # Проверяем: есть ли непрочитанное от клиента > 1 часа
+                should_run_ai = False
+                last_msg = all_messages_for_analysis[-1] if all_messages_for_analysis else None
+                if last_msg and not last_msg.get('from_me'):
+                    # Последнее сообщение от клиента
+                    hours_since = (now.timestamp() - last_msg.get('timestamp', 0)) / 3600
+                    if hours_since >= 1.0:
+                        should_run_ai = True
+                
+                # Google AI анализ - только если нет ответа > 1 час
                 ai_analysis = {}
-                try:
-                    ai_analysis = google_ai_analyzer.analyze_dialog_with_ai(all_messages_for_analysis)
-                except Exception as e:
-                    logger.warning(f"Google AI анализ не удался для {name}: {e}")
+                if should_run_ai:
+                    try:
+                        ai_analysis = google_ai_analyzer.analyze_dialog_with_ai(all_messages_for_analysis)
+                        logger.info(f"🤖 AI анализ выполнен для {name} (нет ответа {hours_since:.1f}ч)")
+                    except Exception as e:
+                        logger.warning(f"Google AI анализ не удался для {name}: {e}")
 
                 # Формируем ссылку на чат
                 chat_link = ""
