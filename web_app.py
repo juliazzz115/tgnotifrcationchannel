@@ -413,30 +413,37 @@ class DialogScanner:
                 if not all_messages_for_analysis:
                     continue
                 
-                logger.info(f"✅ Добавляем в аналитику: {name} (последнее сообщение {hours_since_last:.1f}ч назад, всего {len(all_messages_for_analysis)} сообщений)")
+                # Определяем кто написал последним
+                last_msg_obj = all_messages_for_analysis[-1] if all_messages_for_analysis else None
+                if not last_msg_obj:
+                    continue
+                
+                last_from_client = not last_msg_obj.get('from_me')
+                last_from_us = last_msg_obj.get('from_me')
+                
+                # ДОБАВЛЯЕМ В АНАЛИТИКУ ЕСЛИ:
+                # 1) Последнее сообщение от клиента И прошел >1 час (мы не ответили)
+                # 2) Последнее сообщение от нас И прошел >1 час (они не ответили)
+                # В обоих случаях диалог "завис" больше часа
+                
+                if hours_since_last < 1.0:
+                    continue  # Пропускаем если активность была меньше часа назад
+                
+                who_last = "клиент не ответил" if last_from_us else "мы не ответили"
+                logger.info(f"✅ Добавляем в аналитику: {name} ({who_last} {hours_since_last:.1f}ч, всего {len(all_messages_for_analysis)} сообщений)")
 
                 # Анализ времени ответа
                 response_analysis = detailed_analyzer.analyze_response_times(all_messages_for_analysis)
                 all_responses_analysis = detailed_analyzer.analyze_all_response_times(all_messages_for_analysis)
                 manager_analysis = detailed_analyzer.analyze_manager_behavior(all_messages_for_analysis)
                 
-                # Проверяем: есть ли непрочитанное от клиента > 1 часа
-                should_run_ai = False
-                last_msg = all_messages_for_analysis[-1] if all_messages_for_analysis else None
-                if last_msg and not last_msg.get('from_me'):
-                    # Последнее сообщение от клиента
-                    hours_since = (now.timestamp() - last_msg.get('timestamp', 0)) / 3600
-                    if hours_since >= 1.0:
-                        should_run_ai = True
-                
-                # Google AI анализ - только если нет ответа > 1 час
+                # Google AI анализ - запускаем ВСЕГДА для диалогов >1 час
                 ai_analysis = {}
-                if should_run_ai:
-                    try:
-                        ai_analysis = google_ai_analyzer.analyze_dialog_with_ai(all_messages_for_analysis)
-                        logger.info(f"🤖 AI анализ выполнен для {name} (нет ответа {hours_since:.1f}ч)")
-                    except Exception as e:
-                        logger.warning(f"Google AI анализ не удался для {name}: {e}")
+                try:
+                    ai_analysis = google_ai_analyzer.analyze_dialog_with_ai(all_messages_for_analysis)
+                    logger.info(f"🤖 AI анализ выполнен для {name} ({who_last} {hours_since_last:.1f}ч)")
+                except Exception as e:
+                    logger.warning(f"Google AI анализ не удался для {name}: {e}")
 
                 # Формируем ссылку на чат
                 chat_link = ""
