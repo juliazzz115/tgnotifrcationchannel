@@ -1,0 +1,8 @@
+2025-12-09 11:31:24,127 - INFO - 🚀 Запуск Telegram Alerts - Система для менеджеров
+2025-12-09 11:31:24,128 - WARNING - ⚠️  Сессия не найдена. Откройте /setup для настройки
+2025-12-09 11:31:24,128 - WARNING - Werkzeug appears to be used in a production deployment. Consider switching to a production web server instead.
+ * Serving Flask app 'web_app'
+ * Debug mode: off
+Address already in use
+Port 5000 is in use by another program. Either identify and stop that program, or start the server with a different port.
+On macOS, try searching for and disabling 'AirPlay Receiver' in System Settings.

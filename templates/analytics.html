@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Аналитика диалогов</title>
+    <title>Расширенная Аналитика - Telegram Alerts</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
@@ -16,723 +16,1212 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background: #f5f7fa;
-            color: #333;
+            color: #1a1a1a;
             line-height: 1.6;
         }
 
         .header {
             background: white;
             border-bottom: 1px solid #e1e8ed;
-            padding: 20px 0;
+            padding: 16px 24px;
             position: sticky;
             top: 0;
             z-index: 100;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 0 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.04);
         }
 
         .header-content {
+            max-width: 1600px;
+            margin: 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
-        .logo {
+        .header h1 {
             font-size: 24px;
             font-weight: 600;
             color: #0066cc;
         }
 
-        .nav-tabs {
+        .header-actions {
             display: flex;
-            gap: 10px;
+            gap: 12px;
+            align-items: center;
         }
 
-        .nav-tab {
-            padding: 10px 20px;
-            background: white;
-            border: 2px solid #e1e8ed;
-            border-radius: 8px;
-            text-decoration: none;
-            color: #657786;
-            font-weight: 600;
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
             transition: all 0.2s;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-block;
         }
 
-        .nav-tab:hover {
-            border-color: #0066cc;
-            color: #0066cc;
-        }
-
-        .nav-tab.active {
+        .btn-primary {
             background: #0066cc;
             color: white;
-            border-color: #0066cc;
         }
 
-        .status {
+        .btn-primary:hover {
+            background: #0052a3;
+        }
+
+        .btn-secondary {
+            background: #f5f7fa;
+            color: #1a1a1a;
+            border: 1px solid #e1e8ed;
+        }
+
+        .btn-secondary:hover {
+            background: #e8ecf0;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .tabs {
+            background: white;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+
+        .tab-buttons {
             display: flex;
+            border-bottom: 2px solid #f5f7fa;
+            background: #fafbfc;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 16px 24px;
+            background: none;
+            border: none;
+            font-size: 15px;
+            font-weight: 500;
+            color: #657786;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .tab-button:hover {
+            background: #f5f7fa;
+            color: #1a1a1a;
+        }
+
+        .tab-button.active {
+            color: #0066cc;
+            background: white;
+        }
+
+        .tab-button.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: #0066cc;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 24px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .filters-section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+
+        .filters-header {
+            display: flex;
+            justify-content: space-between;
             align-items: center;
-            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .filters-header h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .filters-toggle {
+            background: none;
+            border: none;
+            color: #0066cc;
             font-size: 14px;
+            cursor: pointer;
+            padding: 4px 8px;
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .filter-label {
+            font-size: 13px;
+            font-weight: 500;
             color: #657786;
         }
 
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #17bf63;
+        .filter-select, .filter-input {
+            padding: 10px 12px;
+            border: 1px solid #e1e8ed;
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+            color: #1a1a1a;
+            transition: border-color 0.2s;
         }
 
-        .status-dot.offline {
-            background: #e0245e;
+        .filter-select:focus, .filter-input:focus {
+            outline: none;
+            border-color: #0066cc;
         }
 
-        .main-stats {
+        .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin: 24px 0;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
         }
 
         .stat-card {
             background: white;
             border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-            border-left: 4px solid #0066cc;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            transition: transform 0.2s, box-shadow 0.2s;
         }
 
-        .stat-card.warning {
-            border-left-color: #ff9500;
-        }
-
-        .stat-card.danger {
-            border-left-color: #e0245e;
-        }
-
-        .stat-card.success {
-            border-left-color: #17bf63;
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
 
         .stat-label {
             font-size: 13px;
             color: #657786;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
             margin-bottom: 8px;
+            font-weight: 500;
         }
 
         .stat-value {
-            font-size: 36px;
+            font-size: 32px;
             font-weight: 700;
-            color: #14171a;
-            margin-bottom: 8px;
+            color: #1a1a1a;
+            margin-bottom: 4px;
         }
 
-        .stat-description {
-            font-size: 13px;
-            color: #657786;
-        }
-
-        .charts-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-            gap: 20px;
-            margin: 24px 0;
-        }
-
-        .chart-card {
+        .dialogs-section {
             background: white;
             border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         }
 
-        .chart-title {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 20px;
-            color: #14171a;
-        }
-
-        .details-section {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            margin: 24px 0;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        }
-
-        .section-title {
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 20px;
-            color: #14171a;
-            border-bottom: 2px solid #f5f7fa;
-            padding-bottom: 12px;
-        }
-
-        .dialog-detail-card {
+        .dialog-card {
             background: #f5f7fa;
             border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 16px;
-            border-left: 4px solid #e1e8ed;
+            padding: 16px;
+            margin-bottom: 12px;
+            transition: all 0.2s;
+            border-left: 4px solid transparent;
         }
 
-        .dialog-detail-card.overtime {
-            border-left-color: #e0245e;
-            background: #fff5f5;
+        .dialog-card:hover {
+            background: #e8ecf0;
+            transform: translateX(2px);
         }
 
-        .dialog-detail-card.good {
+        .dialog-card.quality-excellent {
             border-left-color: #17bf63;
-            background: #f0fff4;
         }
 
-        .dialog-header-row {
+        .dialog-card.quality-good {
+            border-left-color: #1da1f2;
+        }
+
+        .dialog-card.quality-satisfactory {
+            border-left-color: #ffad1f;
+        }
+
+        .dialog-card.quality-poor {
+            border-left-color: #ff6b35;
+        }
+
+        .dialog-card.quality-critical {
+            border-left-color: #e0245e;
+        }
+
+        .dialog-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 12px;
         }
 
-        .dialog-name {
-            font-size: 18px;
+        .dialog-client {
+            font-size: 15px;
             font-weight: 600;
-            color: #14171a;
+            color: #1a1a1a;
         }
 
-        .badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-            margin-left: 8px;
+        .dialog-time {
+            font-size: 13px;
+            color: #657786;
         }
 
-        .badge.excellent { background: #d1fae5; color: #065f46; }
-        .badge.good { background: #d1fae5; color: #047857; }
-        .badge.acceptable { background: #fef3c7; color: #92400e; }
-        .badge.slow { background: #fed7aa; color: #9a3412; }
-        .badge.very-slow { background: #fee2e2; color: #991b1b; }
-
-        .metric-row {
+        .dialog-metrics {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-top: 12px;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 12px;
         }
 
         .metric-item {
             display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-        }
-
-        .metric-icon {
-            font-size: 18px;
+            justify-content: space-between;
+            font-size: 13px;
         }
 
         .metric-label {
             color: #657786;
-            font-weight: 500;
         }
 
         .metric-value {
-            color: #14171a;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .dialog-ai-summary {
+            background: #e3f2fd;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 12px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .dialog-ai-summary strong {
+            color: #0066cc;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+
+        .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #1a1a1a;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+
+        .managers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .manager-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+
+        .manager-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #f5f7fa;
+        }
+
+        .manager-name {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1a1a1a;
+        }
+
+        .manager-score {
+            font-size: 28px;
+            font-weight: 700;
+            color: #0066cc;
+        }
+
+        .manager-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .manager-stat {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .manager-stat-label {
+            font-size: 12px;
+            color: #657786;
+            font-weight: 500;
+        }
+
+        .manager-stat-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .insights-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .insights-table th {
+            background: #f5f7fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #657786;
+            border-bottom: 2px solid #e1e8ed;
+        }
+
+        .insights-table td {
+            padding: 12px;
+            border-bottom: 1px solid #f5f7fa;
+        }
+
+        .insights-table tr:hover {
+            background: #fafbfc;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
             font-weight: 600;
         }
 
-        .no-data {
+        .badge-excellent {
+            background: #d4f4dd;
+            color: #107c41;
+        }
+
+        .badge-good {
+            background: #cfe7ff;
+            color: #004c97;
+        }
+
+        .badge-satisfactory {
+            background: #fff4cc;
+            color: #a66900;
+        }
+
+        .badge-poor {
+            background: #ffe5d9;
+            color: #c4320a;
+        }
+
+        .badge-critical {
+            background: #ffd6e0;
+            color: #a3023c;
+        }
+
+        .empty-state {
             text-align: center;
             padding: 60px 20px;
             color: #657786;
-            font-size: 16px;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+
+        .empty-state-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 8px;
+        }
+
+        .empty-state-text {
+            font-size: 14px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #657786;
+        }
+
+        .spinner {
+            border: 3px solid #f5f7fa;
+            border-top: 3px solid #0066cc;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         @media (max-width: 768px) {
-            .charts-grid {
+            .container {
+                padding: 16px;
+            }
+
+            .stats-grid {
                 grid-template-columns: 1fr;
             }
 
-            .main-stats {
+            .filters-grid {
                 grid-template-columns: 1fr;
             }
 
-            .nav-tabs {
+            .tab-buttons {
                 flex-wrap: wrap;
+            }
+
+            .tab-button {
+                flex: 1 0 50%;
             }
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="container">
-            <div class="header-content">
-                <div class="logo">📊 Аналитика диалогов</div>
-                <div class="nav-tabs">
-                    <a href="/manager" class="nav-tab">Диалоги</a>
-                    <a href="/analytics" class="nav-tab active">Аналитика</a>
-                </div>
-                <div class="status">
-                    <span class="status-dot" id="status-dot"></span>
-                    <span id="connection-status">Подключение...</span>
-                </div>
+        <div class="header-content">
+            <h1>📊 Расширенная Аналитика</h1>
+            <div class="header-actions">
+                <span id="last-update" style="font-size: 13px; color: #657786;"></span>
+                <button class="btn btn-secondary" onclick="refreshData()">🔄 Обновить</button>
+                <button class="btn btn-primary" onclick="exportData()">📥 Экспорт</button>
+                <a href="/" class="btn btn-secondary">← Назад</a>
             </div>
         </div>
     </div>
 
     <div class="container">
-        <div class="main-stats">
-            <div class="stat-card">
-                <div class="stat-label">Всего диалогов за день</div>
-                <div class="stat-value" id="stat-total">0</div>
-                <div class="stat-description">Неотвеченных сообщений</div>
+        <div class="tabs">
+            <div class="tab-buttons">
+                <button class="tab-button active" onclick="switchTab(event, 'overview')">📈 Общая аналитика</button>
+                <button class="tab-button" onclick="switchTab(event, 'managers')">👥 По менеджерам</button>
+                <button class="tab-button" onclick="switchTab(event, 'timeline')">⏱️ Временная</button>
+                <button class="tab-button" onclick="switchTab(event, 'ai-insights')">🤖 AI Insights</button>
             </div>
 
-            <div class="stat-card warning">
-                <div class="stat-label">Среднее время ответа</div>
-                <div class="stat-value" id="stat-avg-time">0ч</div>
-                <div class="stat-description" id="stat-avg-desc">На первое сообщение клиента</div>
-            </div>
-
-            <div class="stat-card danger">
-                <div class="stat-label">Превышение SLA (>1.5ч)</div>
-                <div class="stat-value" id="stat-overtime">0</div>
-                <div class="stat-description" id="stat-overtime-desc">0% от общего числа</div>
-            </div>
-
-            <div class="stat-card success">
-                <div class="stat-label">Менеджер представился</div>
-                <div class="stat-value" id="stat-introduced">0%</div>
-                <div class="stat-description">Процент диалогов с представлением</div>
-            </div>
-        </div>
-
-        <div class="details-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <div class="section-title">Детальный анализ диалогов</div>
-                <a href="/api/export_analytics_csv" download style="padding: 12px 24px; background: #10b981; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; gap: 8px;">
-                    📊 Скачать сводку для руководства
-                </a>
-            </div>
-            
-            <!-- Панель фильтров -->
-            <div style="background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-                    <div>
-                        <label style="display: block; font-size: 13px; font-weight: 600; color: #657786; margin-bottom: 8px;">
-                            Качество ответа:
-                        </label>
-                        <select id="filter-quality" style="width: 100%; padding: 10px; border: 1px solid #e1e8ed; border-radius: 8px; font-size: 14px;">
-                            <option value="">Все</option>
-                            <option value="отлично">Отлично (<15 мин)</option>
-                            <option value="хорошо">Хорошо (15-30 мин)</option>
-                            <option value="приемлемо">Приемлемо (30-60 мин)</option>
-                            <option value="долго">Долго (1-1.5ч)</option>
-                            <option value="очень_долго">Очень долго (>1.5ч)</option>
-                        </select>
+            <div id="tab-overview" class="tab-content active">
+                <div class="filters-section">
+                    <div class="filters-header">
+                        <h3>🔍 Фильтры</h3>
+                        <button class="filters-toggle" onclick="resetFilters()">Сбросить все</button>
                     </div>
-                    
-                    <div>
-                        <label style="display: block; font-size: 13px; font-weight: 600; color: #657786; margin-bottom: 8px;">
-                            Представился:
-                        </label>
-                        <select id="filter-introduced" style="width: 100%; padding: 10px; border: 1px solid #e1e8ed; border-radius: 8px; font-size: 14px;">
-                            <option value="">Все</option>
-                            <option value="true">Да</option>
-                            <option value="false">Нет</option>
-                        </select>
-                    </div>
-                    
-                    <div>
-                        <label style="display: block; font-size: 13px; font-weight: 600; color: #657786; margin-bottom: 8px;">
-                            Оценка AI:
-                        </label>
-                        <select id="filter-score" style="width: 100%; padding: 10px; border: 1px solid #e1e8ed; border-radius: 8px; font-size: 14px;">
-                            <option value="">Все</option>
-                            <option value="high">Высокая (8-10)</option>
-                            <option value="medium">Средняя (5-7)</option>
-                            <option value="low">Низкая (1-4)</option>
-                        </select>
-                    </div>
-                    
-                    <div>
-                        <label style="display: block; font-size: 13px; font-weight: 600; color: #657786; margin-bottom: 8px;">
-                            Сортировка:
-                        </label>
-                        <select id="sort-by" style="width: 100%; padding: 10px; border: 1px solid #e1e8ed; border-radius: 8px; font-size: 14px;">
-                            <option value="time-desc">Время (новые)</option>
-                            <option value="time-asc">Время (старые)</option>
-                            <option value="response-asc">Быстрый ответ</option>
-                            <option value="response-desc">Медленный ответ</option>
-                            <option value="score-desc">Высокая оценка</option>
-                            <option value="score-asc">Низкая оценка</option>
-                        </select>
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label class="filter-label">Дата от</label>
+                            <input type="date" class="filter-input" id="filter-date-from">
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Дата до</label>
+                            <input type="date" class="filter-input" id="filter-date-to">
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Качество</label>
+                            <select class="filter-select" id="filter-quality">
+                                <option value="all">Все</option>
+                                <option value="excellent">Отлично</option>
+                                <option value="good">Хорошо</option>
+                                <option value="satisfactory">Приемлемо</option>
+                                <option value="poor">Плохо</option>
+                                <option value="critical">Критично</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Менеджер</label>
+                            <select class="filter-select" id="filter-manager">
+                                <option value="all">Все</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Представился</label>
+                            <select class="filter-select" id="filter-introduced">
+                                <option value="all">Все</option>
+                                <option value="yes">Да</option>
+                                <option value="no">Нет</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Статус решения</label>
+                            <select class="filter-select" id="filter-resolution">
+                                <option value="all">Все</option>
+                                <option value="resolved">Решён</option>
+                                <option value="in_progress">В процессе</option>
+                                <option value="ignored">Игнорирован</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Уровень риска</label>
+                            <select class="filter-select" id="filter-risk">
+                                <option value="all">Все</option>
+                                <option value="low">Низкий</option>
+                                <option value="medium">Средний</option>
+                                <option value="high">Высокий</option>
+                                <option value="critical">Критический</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Сортировка</label>
+                            <select class="filter-select" id="filter-sort">
+                                <option value="newest">Новые первыми</option>
+                                <option value="oldest">Старые первыми</option>
+                                <option value="best-quality">Лучшее качество</option>
+                                <option value="worst-quality">Худшее качество</option>
+                                <option value="highest-risk">Высокий риск</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
-                
-                <div style="margin-top: 15px; display: flex; gap: 10px;">
-                    <button onclick="applyFilters()" style="flex: 1; padding: 12px; background: #1da1f2; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px;">
-                        Применить фильтры
-                    </button>
-                    <button onclick="resetFilters()" style="padding: 12px 24px; background: #e1e8ed; color: #14171a; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px;">
-                        Сбросить
-                    </button>
+
+                <div class="stats-grid" id="overview-stats"></div>
+
+                <div class="dialogs-section">
+                    <h3 style="margin-bottom: 16px; font-size: 18px; font-weight: 600;">Диалоги (<span id="dialogs-count">0</span>)</h3>
+                    <div id="dialogs-list">
+                        <div class="loading">
+                            <div class="spinner"></div>
+                            <p>Загрузка данных...</p>
+                        </div>
+                    </div>
                 </div>
             </div>
-            
-            <div id="dialogDetails">
-                <div class="no-data">Загрузка данных...</div>
+
+            <div id="tab-managers" class="tab-content">
+                <div class="managers-grid" id="managers-grid"></div>
+            </div>
+
+            <div id="tab-timeline" class="tab-content">
+                <div class="chart-container">
+                    <h3 class="chart-title">Распределение диалогов по времени суток</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="chart-timeline"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <h3 class="chart-title">Среднее время ответа по часам</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="chart-response-time"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <h3 class="chart-title">Качество обслуживания по дням недели</h3>
+                    <div class="chart-wrapper">
+                        <canvas id="chart-quality-days"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-ai-insights" class="tab-content">
+                <div class="dialogs-section">
+                    <h3 style="margin-bottom: 16px; font-size: 18px; font-weight: 600;">Детальный AI анализ</h3>
+                    <table class="insights-table" id="ai-insights-table">
+                        <thead>
+                            <tr>
+                                <th>Клиент</th>
+                                <th>Менеджер</th>
+                                <th>Качество</th>
+                                <th>Настроение</th>
+                                <th>Риск оттока</th>
+                                <th>Тема</th>
+                                <th>Рекомендации</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        const socket = io({
-            transports: ['websocket', 'polling'],
-            reconnection: true
-        });
+        const socket = io();
+        let allDialogs = [];
+        let filteredDialogs = [];
+        let charts = {};
 
         socket.on('connect', () => {
-            console.log('✅ Подключено');
-            document.getElementById('connection-status').textContent = 'Онлайн';
-            document.getElementById('status-dot').classList.remove('offline');
-            loadAnalytics();
-        });
-
-        socket.on('disconnect', () => {
-            console.log('❌ Отключено');
-            document.getElementById('connection-status').textContent = 'Офлайн';
-            document.getElementById('status-dot').classList.add('offline');
+            console.log('✅ WebSocket подключен');
+            loadData();
         });
 
         socket.on('analytics_update', (data) => {
-            console.log('📊 Получена аналитика:', data);
-            renderAnalytics(data);
+            console.log('📊 Получены данные аналитики:', data);
+            allDialogs = data.dialogs || [];
+            applyFilters();
+            updateLastUpdate();
         });
 
-        async function loadAnalytics() {
+        async function loadData() {
             try {
                 const response = await fetch('/api/analytics');
                 const data = await response.json();
-                renderAnalytics(data);
-            } catch (e) {
-                console.error('Ошибка загрузки аналитики:', e);
+                allDialogs = data.dialogs || [];
+                applyFilters();
+                updateLastUpdate();
+            } catch (error) {
+                console.error('Ошибка загрузки данных:', error);
             }
         }
 
-        function renderAnalytics(data) {
-            const stats = data.daily_stats;
-            const dialogs = data.dialogs;
-
-            document.getElementById('stat-total').textContent = stats.total_dialogs;
-            document.getElementById('stat-avg-time').textContent = stats.avg_response_time_minutes ? `${stats.avg_response_time_minutes} мин` : '-';
-            document.getElementById('stat-avg-desc').textContent = stats.avg_response_time_minutes ? `${stats.avg_response_time_minutes} минут (рабочее время 8:00-16:00)` : 'Нет данных';
-            
-            document.getElementById('stat-overtime').textContent = stats.overtime_count;
-            document.getElementById('stat-overtime-desc').textContent = `${stats.overtime_percentage}% от общего числа`;
-
-            document.getElementById('stat-introduced').textContent = `${stats.introduced_percentage}%`;
-
-            renderDialogDetails(dialogs);
+        function refreshData() {
+            loadData();
         }
 
-        function renderDialogDetails(dialogs) {
-            const container = document.getElementById('dialogDetails');
+        function switchTab(event, tabName) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
 
-            if (!dialogs || dialogs.length === 0) {
-                container.innerHTML = '<div class="no-data">Нет диалогов для анализа</div>';
+            if (tabName === 'managers') {
+                renderManagers();
+            } else if (tabName === 'timeline') {
+                renderTimelineCharts();
+            } else if (tabName === 'ai-insights') {
+                renderAIInsights();
+            }
+        }
+
+        function applyFilters() {
+            const dateFrom = document.getElementById('filter-date-from').value;
+            const dateTo = document.getElementById('filter-date-to').value;
+            const quality = document.getElementById('filter-quality').value;
+            const manager = document.getElementById('filter-manager').value;
+            const introduced = document.getElementById('filter-introduced').value;
+            const resolution = document.getElementById('filter-resolution').value;
+            const risk = document.getElementById('filter-risk').value;
+            const sort = document.getElementById('filter-sort').value;
+
+            filteredDialogs = allDialogs.filter(dialog => {
+                const dialogDate = dialog.first_message_time ? dialog.first_message_time.split(' ')[0] : '';
+                
+                if (dateFrom && dialogDate < dateFrom) return false;
+                if (dateTo && dialogDate > dateTo) return false;
+                if (quality !== 'all' && dialog.ai_analysis?.overall_quality !== quality) return false;
+                if (manager !== 'all' && dialog.ai_analysis?.manager_name !== manager) return false;
+                if (introduced !== 'all') {
+                    const isIntroduced = dialog.ai_analysis?.manager_introduced || false;
+                    if (introduced === 'yes' && !isIntroduced) return false;
+                    if (introduced === 'no' && isIntroduced) return false;
+                }
+                if (resolution !== 'all' && dialog.ai_analysis?.resolution_status !== resolution) return false;
+                if (risk !== 'all' && dialog.ai_analysis?.churn_risk_level !== risk) return false;
+
+                return true;
+            });
+
+            if (sort === 'newest') {
+                filteredDialogs.sort((a, b) => (b.last_message_timestamp || 0) - (a.last_message_timestamp || 0));
+            } else if (sort === 'oldest') {
+                filteredDialogs.sort((a, b) => (a.last_message_timestamp || 0) - (b.last_message_timestamp || 0));
+            } else if (sort === 'best-quality') {
+                filteredDialogs.sort((a, b) => {
+                    const scoreA = a.ai_analysis?.client_satisfaction_estimate || 0;
+                    const scoreB = b.ai_analysis?.client_satisfaction_estimate || 0;
+                    return scoreB - scoreA;
+                });
+            } else if (sort === 'worst-quality') {
+                filteredDialogs.sort((a, b) => {
+                    const scoreA = a.ai_analysis?.client_satisfaction_estimate || 0;
+                    const scoreB = b.ai_analysis?.client_satisfaction_estimate || 0;
+                    return scoreA - scoreB;
+                });
+            } else if (sort === 'highest-risk') {
+                const riskOrder = { critical: 4, high: 3, medium: 2, low: 1 };
+                filteredDialogs.sort((a, b) => {
+                    const riskA = riskOrder[a.ai_analysis?.churn_risk_level] || 0;
+                    const riskB = riskOrder[b.ai_analysis?.churn_risk_level] || 0;
+                    return riskB - riskA;
+                });
+            }
+
+            renderOverview();
+            populateManagerFilter();
+        }
+
+        function resetFilters() {
+            document.getElementById('filter-date-from').value = '';
+            document.getElementById('filter-date-to').value = '';
+            document.getElementById('filter-quality').value = 'all';
+            document.getElementById('filter-manager').value = 'all';
+            document.getElementById('filter-introduced').value = 'all';
+            document.getElementById('filter-resolution').value = 'all';
+            document.getElementById('filter-risk').value = 'all';
+            document.getElementById('filter-sort').value = 'newest';
+            applyFilters();
+        }
+
+        function populateManagerFilter() {
+            const managers = new Set();
+            allDialogs.forEach(d => {
+                if (d.ai_analysis?.manager_name) {
+                    managers.add(d.ai_analysis.manager_name);
+                }
+            });
+
+            const select = document.getElementById('filter-manager');
+            const currentValue = select.value;
+            select.innerHTML = '<option value="all">Все</option>';
+            
+            [...managers].sort().forEach(manager => {
+                const option = document.createElement('option');
+                option.value = manager;
+                option.textContent = manager;
+                select.appendChild(option);
+            });
+
+            select.value = currentValue;
+        }
+
+        function renderOverview() {
+            renderStats();
+            renderDialogsList();
+        }
+
+        function renderStats() {
+            const total = filteredDialogs.length;
+            const avgSatisfaction = total > 0 
+                ? (filteredDialogs.reduce((sum, d) => sum + (d.ai_analysis?.client_satisfaction_estimate || 0), 0) / total).toFixed(1)
+                : 0;
+            
+            const introduced = filteredDialogs.filter(d => d.ai_analysis?.manager_introduced).length;
+            const introducedPercent = total > 0 ? ((introduced / total) * 100).toFixed(0) : 0;
+
+            const avgResponseTime = total > 0
+                ? (filteredDialogs.reduce((sum, d) => sum + (d.response_time_minutes || 0), 0) / total).toFixed(0)
+                : 0;
+
+            const highRisk = filteredDialogs.filter(d => 
+                d.ai_analysis?.churn_risk_level === 'high' || d.ai_analysis?.churn_risk_level === 'critical'
+            ).length;
+
+            const excellent = filteredDialogs.filter(d => d.ai_analysis?.overall_quality === 'excellent').length;
+
+            const html = `
+                <div class="stat-card">
+                    <div class="stat-label">Всего диалогов</div>
+                    <div class="stat-value">${total}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Средняя оценка</div>
+                    <div class="stat-value">${avgSatisfaction}<span style="font-size: 18px; color: #657786;">/10</span></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Представились</div>
+                    <div class="stat-value">${introducedPercent}<span style="font-size: 18px; color: #657786;">%</span></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Ср. время ответа</div>
+                    <div class="stat-value">${avgResponseTime}<span style="font-size: 18px; color: #657786;">м</span></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Отличное качество</div>
+                    <div class="stat-value" style="color: #17bf63;">${excellent}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Высокий риск</div>
+                    <div class="stat-value" style="color: #e0245e;">${highRisk}</div>
+                </div>
+            `;
+
+            document.getElementById('overview-stats').innerHTML = html;
+        }
+
+        function renderDialogsList() {
+            const container = document.getElementById('dialogs-list');
+            document.getElementById('dialogs-count').textContent = filteredDialogs.length;
+
+            if (filteredDialogs.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <div class="empty-state-title">Нет диалогов</div>
+                        <div class="empty-state-text">Попробуйте изменить фильтры</div>
+                    </div>
+                `;
                 return;
             }
 
-            let html = '';
+            const html = filteredDialogs.map(dialog => {
+                const ai = dialog.ai_analysis || {};
+                const quality = ai.overall_quality || 'satisfactory';
+                const qualityClass = `quality-${quality}`;
 
-            dialogs.forEach(dialog => {
-                const cardClass = dialog.is_overtime ? 'overtime' : 
-                                 (dialog.response_quality === 'отлично' || dialog.response_quality === 'хорошо') ? 'good' : '';
-
-                const qualityBadgeClass = {
-                    'отлично': 'excellent',
-                    'хорошо': 'good',
-                    'приемлемо': 'acceptable',
-                    'долго': 'slow',
-                    'очень_долго': 'very-slow'
-                }[dialog.response_quality] || 'acceptable';
-
-                const qualityText = {
-                    'отлично': 'Отлично',
-                    'хорошо': 'Хорошо',
-                    'приемлемо': 'Приемлемо',
-                    'долго': 'Долго',
-                    'очень_долго': 'Очень долго',
-                    'нет_ответа': 'Нет ответа'
-                }[dialog.response_quality] || dialog.response_quality;
-
-                html += `
-                    <div class="dialog-detail-card ${cardClass}">
-                        <div class="dialog-header-row">
-                            <div>
-                                <span class="dialog-name">${escapeHtml(dialog.name)}</span>
-                                <span class="badge ${qualityBadgeClass}">${qualityText}</span>
-                            </div>
-                            <div style="font-size: 14px; color: #657786;">
-                                ${dialog.time} | ${dialog.date}
-                            </div>
+                return `
+                    <div class="dialog-card ${qualityClass}">
+                        <div class="dialog-header">
+                            <div class="dialog-client">${dialog.client_name || 'Клиент'}</div>
+                            <div class="dialog-time">${dialog.first_message_time || ''}</div>
                         </div>
-
-                        <div class="metric-row">
+                        
+                        <div class="dialog-metrics">
                             <div class="metric-item">
-                                <span class="metric-icon">⏱️</span>
-                                <span class="metric-label">Время ответа (раб. время):</span>
-                                <span class="metric-value">
-                                    ${dialog.response_delay_working_minutes ? `${dialog.response_delay_working_minutes} мин` : '-'}
-                                </span>
+                                <span class="metric-label">Менеджер:</span>
+                                <span class="metric-value">${ai.manager_name || 'н/д'}</span>
                             </div>
-
                             <div class="metric-item">
-                                <span class="metric-icon">${dialog.introduced ? '✅' : '❌'}</span>
+                                <span class="metric-label">Оценка:</span>
+                                <span class="metric-value">${ai.client_satisfaction_estimate || 0}/10</span>
+                            </div>
+                            <div class="metric-item">
+                                <span class="metric-label">Время ответа:</span>
+                                <span class="metric-value">${dialog.response_time_minutes || 0}м</span>
+                            </div>
+                            <div class="metric-item">
                                 <span class="metric-label">Представился:</span>
-                                <span class="metric-value">
-                                    ${dialog.introduced ? (dialog.manager_name || 'Да') : 'Нет'}
-                                </span>
+                                <span class="metric-value">${ai.manager_introduced ? '✅' : '❌'}</span>
                             </div>
-
                             <div class="metric-item">
-                                <span class="metric-icon">${dialog.greeting ? '👋' : '❌'}</span>
-                                <span class="metric-label">Приветствие:</span>
-                                <span class="metric-value">${dialog.greeting ? 'Да' : 'Нет'}</span>
+                                <span class="metric-label">Настроение:</span>
+                                <span class="metric-value">${ai.overall_sentiment || 'н/д'}</span>
                             </div>
-
                             <div class="metric-item">
-                                <span class="metric-icon">${dialog.client_emotion || '😐'}</span>
-                                <span class="metric-label">Настроение клиента</span>
+                                <span class="metric-label">Риск оттока:</span>
+                                <span class="metric-value">${ai.churn_risk_level || 'н/д'}</span>
                             </div>
                         </div>
 
-                        ${dialog.professionalism_score ? `
-                            <div style="margin-top: 12px; padding: 12px; background: white; border-radius: 6px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px;">
-                                <div>
-                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Профессионализм:</span>
-                                    <span style="font-size: 16px; font-weight: 700; color: ${dialog.professionalism_score >= 8 ? '#17bf63' : dialog.professionalism_score >= 6 ? '#fbbf24' : '#ef4444'}">
-                                        ${dialog.professionalism_score}/10
-                                    </span>
-                                </div>
-                                ${dialog.politeness_score ? `
-                                <div>
-                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Вежливость:</span>
-                                    <span style="font-size: 14px; font-weight: 600;">${dialog.politeness_score}/10</span>
-                                </div>
-                                ` : ''}
-                                ${dialog.clarity_score ? `
-                                <div>
-                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Ясность:</span>
-                                    <span style="font-size: 14px; font-weight: 600;">${dialog.clarity_score}/10</span>
-                                </div>
-                                ` : ''}
-                                ${dialog.proactivity_score ? `
-                                <div>
-                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Проактивность:</span>
-                                    <span style="font-size: 14px; font-weight: 600;">${dialog.proactivity_score}/10</span>
-                                </div>
-                                ` : ''}
-                                ${dialog.responsiveness_score ? `
-                                <div>
-                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Скорость реакции:</span>
-                                    <span style="font-size: 14px; font-weight: 600;">${dialog.responsiveness_score}/10</span>
-                                </div>
-                                ` : ''}
-                                ${dialog.empathy_score ? `
-                                <div>
-                                    <span style="font-size: 13px; color: #657786; font-weight: 600;">Эмпатия:</span>
-                                    <span style="font-size: 14px; font-weight: 600;">${dialog.empathy_score}/10</span>
-                                </div>
-                                ` : ''}
-                            </div>
-                        ` : ''}
-
-                        ${dialog.main_topic || dialog.urgency_level || dialog.emotion_dynamics ? `
-                            <div style="margin-top: 12px; padding: 12px; background: #fefce8; border-radius: 6px; border-left: 3px solid #eab308;">
-                                ${dialog.main_topic ? `
-                                <div style="font-size: 13px; margin-bottom: 6px;">
-                                    <span style="color: #657786; font-weight: 600;">Тема запроса:</span>
-                                    <span style="color: #14171a;">${dialog.main_topic}</span>
-                                </div>
-                                ` : ''}
-                                ${dialog.urgency_level ? `
-                                <div style="font-size: 13px; margin-bottom: 6px;">
-                                    <span style="color: #657786; font-weight: 600;">Срочность:</span>
-                                    <span style="color: #14171a;">${dialog.urgency_level === 'critical' ? '🔴 критическая' : dialog.urgency_level === 'high' ? '🟠 высокая' : dialog.urgency_level === 'medium' ? '🟡 средняя' : '🟢 низкая'}</span>
-                                </div>
-                                ` : ''}
-                                ${dialog.emotion_dynamics ? `
-                                <div style="font-size: 13px;">
-                                    <span style="color: #657786; font-weight: 600;">Динамика эмоций:</span>
-                                    <span style="color: #14171a;">${dialog.emotion_dynamics}</span>
-                                </div>
-                                ` : ''}
-                            </div>
-                        ` : ''}
-
-                        ${dialog.key_moments && dialog.key_moments.length > 0 ? `
-                            <div style="margin-top: 12px; padding: 12px; background: #f0f9ff; border-radius: 6px; border-left: 3px solid #0284c7;">
-                                <div style="font-size: 13px; color: #0284c7; font-weight: 600; margin-bottom: 8px;">
-                                    📌 Ключевые моменты:
-                                </div>
-                                ${dialog.key_moments.map(m => `<div style="font-size: 13px; color: #14171a; margin: 4px 0;">• ${m}</div>`).join('')}
-                            </div>
-                        ` : ''}
-
-                        ${dialog.ai_strengths && dialog.ai_strengths.length > 0 ? `
-                            <div style="margin-top: 12px; padding: 12px; background: #f0fdf4; border-radius: 6px; border-left: 3px solid #10b981;">
-                                <div style="font-size: 13px; color: #10b981; font-weight: 600; margin-bottom: 8px;">
-                                    ✅ Сильные стороны:
-                                </div>
-                                ${dialog.ai_strengths.map(s => `<div style="font-size: 13px; color: #14171a; margin: 4px 0;">• ${s}</div>`).join('')}
-                            </div>
-                        ` : ''}
-
-                        ${dialog.ai_key_issues && dialog.ai_key_issues.length > 0 ? `
-                            <div style="margin-top: 12px; padding: 12px; background: #fef2f2; border-radius: 6px; border-left: 3px solid #ef4444;">
-                                <div style="font-size: 13px; color: #ef4444; font-weight: 600; margin-bottom: 8px;">
-                                    ⚠️ Проблемы:
-                                </div>
-                                ${dialog.ai_key_issues.map(i => `<div style="font-size: 13px; color: #14171a; margin: 4px 0;">• ${i}</div>`).join('')}
-                            </div>
-                        ` : ''}
-
-                        ${dialog.missed_opportunities && dialog.missed_opportunities.length > 0 ? `
-                            <div style="margin-top: 12px; padding: 12px; background: #fef3c7; border-radius: 6px; border-left: 3px solid #f59e0b;">
-                                <div style="font-size: 13px; color: #f59e0b; font-weight: 600; margin-bottom: 8px;">
-                                    💡 Упущенные возможности:
-                                </div>
-                                ${dialog.missed_opportunities.map(o => `<div style="font-size: 13px; color: #14171a; margin: 4px 0;">• ${o}</div>`).join('')}
-                            </div>
-                        ` : ''}
-
-                        ${dialog.risk_level || dialog.churn_risk_level ? `
-                            <div style="margin-top: 12px; padding: 12px; background: ${dialog.risk_level === 'high' || dialog.risk_level === 'critical' ? '#fef2f2' : '#f0fdf4'}; border-radius: 6px; border-left: 3px solid ${dialog.risk_level === 'high' || dialog.risk_level === 'critical' ? '#ef4444' : '#10b981'};">
-                                <div style="font-size: 13px; font-weight: 600; margin-bottom: 4px;">
-                                    ${dialog.risk_level === 'high' || dialog.risk_level === 'critical' ? '⚠️' : '✅'} 
-                                    Риск: ${dialog.risk_level || 'low'} 
-                                    ${dialog.churn_risk_level ? ` | Риск ухода: ${dialog.churn_risk_level}` : ''}
-                                </div>
-                                ${dialog.resolution_status ? `
-                                <div style="font-size: 12px; color: #657786;">Статус: ${dialog.resolution_status}</div>
-                                ` : ''}
-                            </div>
-                        ` : ''}
-
-                        ${dialog.ai_suggestions && dialog.ai_suggestions.length > 0 ? `
-                            <div style="margin-top: 12px; padding: 12px; background: #eff6ff; border-radius: 6px; border-left: 3px solid #0066cc;">
-                                <div style="font-size: 13px; color: #0066cc; font-weight: 600; margin-bottom: 8px;">
-                                    🤖 Рекомендации AI:
-                                </div>
-                                ${dialog.ai_suggestions.map(s => `<div style="font-size: 13px; color: #14171a; margin: 4px 0;">• ${s}</div>`).join('')}
+                        ${ai.summary ? `
+                            <div class="dialog-ai-summary">
+                                <strong>AI резюме:</strong> ${ai.summary}
                             </div>
                         ` : ''}
                     </div>
                 `;
-            });
+            }).join('');
 
             container.innerHTML = html;
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+        function renderManagers() {
+            const managerStats = {};
+
+            filteredDialogs.forEach(dialog => {
+                const managerName = dialog.ai_analysis?.manager_name || 'Неизвестно';
+                if (!managerStats[managerName]) {
+                    managerStats[managerName] = {
+                        total: 0,
+                        totalScore: 0,
+                        introduced: 0,
+                        avgResponseTime: 0,
+                        excellent: 0,
+                        good: 0,
+                        satisfactory: 0,
+                        poor: 0,
+                        critical: 0
+                    };
+                }
+
+                const stats = managerStats[managerName];
+                stats.total++;
+                stats.totalScore += dialog.ai_analysis?.client_satisfaction_estimate || 0;
+                stats.avgResponseTime += dialog.response_time_minutes || 0;
+                if (dialog.ai_analysis?.manager_introduced) stats.introduced++;
+
+                const quality = dialog.ai_analysis?.overall_quality || 'satisfactory';
+                stats[quality] = (stats[quality] || 0) + 1;
+            });
+
+            const html = Object.entries(managerStats).map(([name, stats]) => {
+                const avgScore = (stats.totalScore / stats.total).toFixed(1);
+                const avgTime = (stats.avgResponseTime / stats.total).toFixed(0);
+                const introducedPercent = ((stats.introduced / stats.total) * 100).toFixed(0);
+
+                return `
+                    <div class="manager-card">
+                        <div class="manager-header">
+                            <div class="manager-name">${name}</div>
+                            <div class="manager-score">${avgScore}/10</div>
+                        </div>
+                        <div class="manager-stats">
+                            <div class="manager-stat">
+                                <div class="manager-stat-label">Всего диалогов</div>
+                                <div class="manager-stat-value">${stats.total}</div>
+                            </div>
+                            <div class="manager-stat">
+                                <div class="manager-stat-label">Представился</div>
+                                <div class="manager-stat-value">${introducedPercent}%</div>
+                            </div>
+                            <div class="manager-stat">
+                                <div class="manager-stat-label">Ср. время ответа</div>
+                                <div class="manager-stat-value">${avgTime}м</div>
+                            </div>
+                            <div class="manager-stat">
+                                <div class="manager-stat-label">Отлично</div>
+                                <div class="manager-stat-value" style="color: #17bf63;">${stats.excellent || 0}</div>
+                            </div>
+                            <div class="manager-stat">
+                                <div class="manager-stat-label">Хорошо</div>
+                                <div class="manager-stat-value" style="color: #1da1f2;">${stats.good || 0}</div>
+                            </div>
+                            <div class="manager-stat">
+                                <div class="manager-stat-label">Критично</div>
+                                <div class="manager-stat-value" style="color: #e0245e;">${stats.critical || 0}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('managers-grid').innerHTML = html || '<div class="empty-state"><div class="empty-state-title">Нет данных</div></div>';
         }
 
-        // Глобальное хранилище данных
-        let allDialogsData = [];
-
-        // Обновленная загрузка аналитики
-        function loadAnalytics() {
-            fetch('/api/analytics')
-                .then(res => res.json())
-                .then(data => {
-                    allDialogsData = data.dialogs;
-                    renderAnalytics(data);
-                })
-                .catch(err => console.error('Ошибка загрузки:', err));
+        function renderTimelineCharts() {
+            renderTimelineDistribution();
+            renderResponseTimeByHour();
+            renderQualityByDay();
         }
 
-        // Применить фильтры
-        function applyFilters() {
-            const quality = document.getElementById('filter-quality').value;
-            const introduced = document.getElementById('filter-introduced').value;
-            const score = document.getElementById('filter-score').value;
-            const sortBy = document.getElementById('sort-by').value;
-
-            let filtered = [...allDialogsData];
-
-            // Фильтр по качеству
-            if (quality) {
-                filtered = filtered.filter(d => d.response_quality === quality);
-            }
-
-            // Фильтр по представлению
-            if (introduced) {
-                const isIntroduced = introduced === 'true';
-                filtered = filtered.filter(d => d.introduced === isIntroduced);
-            }
-
-            // Фильтр по оценке AI
-            if (score) {
-                filtered = filtered.filter(d => {
-                    const s = d.professionalism_score || 0;
-                    if (score === 'high') return s >= 8;
-                    if (score === 'medium') return s >= 5 && s < 8;
-                    if (score === 'low') return s < 5;
-                    return true;
-                });
-            }
-
-            // Сортировка
-            filtered.sort((a, b) => {
-                switch(sortBy) {
-                    case 'time-desc':
-                        return (b.timestamp || 0) - (a.timestamp || 0);
-                    case 'time-asc':
-                        return (a.timestamp || 0) - (b.timestamp || 0);
-                    case 'response-asc':
-                        return (a.response_delay_working_minutes || 999) - (b.response_delay_working_minutes || 999);
-                    case 'response-desc':
-                        return (b.response_delay_working_minutes || 0) - (a.response_delay_working_minutes || 0);
-                    case 'score-desc':
-                        return (b.professionalism_score || 0) - (a.professionalism_score || 0);
-                    case 'score-asc':
-                        return (a.professionalism_score || 0) - (b.professionalism_score || 0);
-                    default:
-                        return 0;
+        function renderTimelineDistribution() {
+            const hourCounts = new Array(24).fill(0);
+            
+            filteredDialogs.forEach(dialog => {
+                if (dialog.first_message_time) {
+                    const hour = parseInt(dialog.first_message_time.split(' ')[1]?.split(':')[0] || 0);
+                    hourCounts[hour]++;
                 }
             });
 
-            renderDialogDetails(filtered);
+            const ctx = document.getElementById('chart-timeline');
+            if (charts.timeline) charts.timeline.destroy();
+
+            charts.timeline = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+                    datasets: [{
+                        label: 'Количество диалогов',
+                        data: hourCounts,
+                        backgroundColor: '#0066cc',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
         }
 
-        // Сбросить фильтры
-        function resetFilters() {
-            document.getElementById('filter-quality').value = '';
-            document.getElementById('filter-introduced').value = '';
-            document.getElementById('filter-score').value = '';
-            document.getElementById('sort-by').value = 'time-desc';
-            renderDialogDetails(allDialogsData);
+        function renderResponseTimeByHour() {
+            const hourData = {};
+            
+            filteredDialogs.forEach(dialog => {
+                if (dialog.first_message_time && dialog.response_time_minutes) {
+                    const hour = parseInt(dialog.first_message_time.split(' ')[1]?.split(':')[0] || 0);
+                    if (!hourData[hour]) hourData[hour] = { total: 0, count: 0 };
+                    hourData[hour].total += dialog.response_time_minutes;
+                    hourData[hour].count++;
+                }
+            });
+
+            const avgByHour = Array.from({length: 24}, (_, i) => {
+                return hourData[i] ? (hourData[i].total / hourData[i].count).toFixed(1) : 0;
+            });
+
+            const ctx = document.getElementById('chart-response-time');
+            if (charts.responseTime) charts.responseTime.destroy();
+
+            charts.responseTime = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+                    datasets: [{
+                        label: 'Среднее время ответа (мин)',
+                        data: avgByHour,
+                        borderColor: '#ff6b35',
+                        backgroundColor: 'rgba(255, 107, 53, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
         }
 
-        loadAnalytics();
+        function renderQualityByDay() {
+            const days = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+            const qualityByDay = Array(7).fill(0).map(() => ({ total: 0, score: 0 }));
+
+            filteredDialogs.forEach(dialog => {
+                if (dialog.first_message_time && dialog.ai_analysis?.client_satisfaction_estimate) {
+                    const date = new Date(dialog.first_message_time.split(' ')[0]);
+                    const dayIndex = date.getDay();
+                    qualityByDay[dayIndex].total++;
+                    qualityByDay[dayIndex].score += dialog.ai_analysis.client_satisfaction_estimate;
+                }
+            });
+
+            const avgQuality = qualityByDay.map(d => d.total > 0 ? (d.score / d.total).toFixed(1) : 0);
+
+            const ctx = document.getElementById('chart-quality-days');
+            if (charts.qualityDays) charts.qualityDays.destroy();
+
+            charts.qualityDays = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: days,
+                    datasets: [{
+                        label: 'Средняя оценка',
+                        data: avgQuality,
+                        backgroundColor: '#17bf63',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { 
+                            beginAtZero: true,
+                            max: 10
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderAIInsights() {
+            const tbody = document.querySelector('#ai-insights-table tbody');
+            
+            if (filteredDialogs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px; color: #657786;">Нет данных</td></tr>';
+                return;
+            }
+
+            const rows = filteredDialogs.map(dialog => {
+                const ai = dialog.ai_analysis || {};
+                const qualityBadge = ai.overall_quality ? `<span class="badge badge-${ai.overall_quality}">${ai.overall_quality}</span>` : 'н/д';
+                
+                return `
+                    <tr>
+                        <td><strong>${dialog.client_name || 'Клиент'}</strong><br><small style="color: #657786;">${dialog.first_message_time || ''}</small></td>
+                        <td>${ai.manager_name || 'н/д'}</td>
+                        <td>${qualityBadge}</td>
+                        <td>${ai.overall_sentiment || 'н/д'}</td>
+                        <td>${ai.churn_risk_level || 'н/д'}</td>
+                        <td><small>${ai.main_topic || 'н/д'}</small></td>
+                        <td><small>${(ai.suggestions || []).slice(0, 2).join('; ')}</small></td>
+                    </tr>
+                `;
+            }).join('');
+
+            tbody.innerHTML = rows;
+        }
+
+        function exportData() {
+            const csv = ['Клиент,Менеджер,Качество,Оценка,Время ответа,Представился,Настроение,Риск,Тема,Резюме'];
+            
+            filteredDialogs.forEach(dialog => {
+                const ai = dialog.ai_analysis || {};
+                csv.push([
+                    dialog.client_name || '',
+                    ai.manager_name || '',
+                    ai.overall_quality || '',
+                    ai.client_satisfaction_estimate || 0,
+                    dialog.response_time_minutes || 0,
+                    ai.manager_introduced ? 'Да' : 'Нет',
+                    ai.overall_sentiment || '',
+                    ai.churn_risk_level || '',
+                    ai.main_topic || '',
+                    (ai.summary || '').replace(/,/g, ';')
+                ].join(','));
+            });
+
+            const blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `analytics_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+        }
+
+        function updateLastUpdate() {
+            const now = new Date();
+            document.getElementById('last-update').textContent = `Обновлено: ${now.toLocaleTimeString('ru-RU')}`;
+        }
+
+        document.querySelectorAll('.filter-select, .filter-input').forEach(el => {
+            el.addEventListener('change', applyFilters);
+        });
+
+        loadData();
     </script>
 </body>
 </html>
