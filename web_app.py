@@ -343,7 +343,7 @@ class DialogScanner:
             return []
 
     async def scan_all_dialogs_for_analytics(self):
-        """Получить прочитанные диалоги с 8:00 для аналитики"""
+        """Получить прочитанные диалоги с 15:00 для аналитики"""
         try:
             me = await self.client.get_me()
             dialogs = await self.client.get_dialogs(limit=500)
@@ -351,9 +351,9 @@ class DialogScanner:
             all_dialogs = []
             
             now = datetime.now(LOCAL_TZ)
-            today_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
+            today_3pm = now.replace(hour=15, minute=0, second=0, microsecond=0)
 
-            logger.info(f"📊 Сбор прочитанных диалогов с {today_8am.strftime('%H:%M')}")
+            logger.info(f"📊 Сбор прочитанных диалогов с {today_3pm.strftime('%H:%M')}")
 
             for dialog in dialogs:
                 if is_excluded(dialog):
@@ -372,14 +372,14 @@ class DialogScanner:
 
                 name = dialog.name or getattr(entity, 'username', 'Без имени')
 
-                # Получаем сообщения с 8:00
+                # Получаем сообщения с 15:00
                 all_messages_for_analysis = []
                 try:
                     async for msg in self.client.iter_messages(entity, limit=None):
                         msg_local_time = msg.date.astimezone(LOCAL_TZ)
                         
-                        # Фильтр: только сообщения с 8:00 сегодня
-                        if msg_local_time < today_8am:
+                        # Фильтр: только сообщения с 15:00 сегодня
+                        if msg_local_time < today_3pm:
                             break
                         
                         msg_sender = await msg.get_sender()
