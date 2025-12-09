@@ -697,6 +697,15 @@
         let filteredDialogs = [];
         let charts = {};
 
+        function getDialogQuality(dialog) {
+            const score = dialog.professionalism_score || 0;
+            if (score >= 9) return 'excellent';
+            if (score >= 7) return 'good';
+            if (score >= 5) return 'satisfactory';
+            if (score >= 3) return 'poor';
+            return 'critical';
+        }
+
         socket.on('connect', () => {
             console.log('✅ WebSocket подключен');
             loadData();
@@ -752,44 +761,46 @@
             const sort = document.getElementById('filter-sort').value;
 
             filteredDialogs = allDialogs.filter(dialog => {
-                const dialogDate = dialog.first_message_time ? dialog.first_message_time.split(' ')[0] : '';
+                const dialogDate = dialog.time ? dialog.time.split(' ')[0] : (dialog.date || '');
                 
                 if (dateFrom && dialogDate < dateFrom) return false;
                 if (dateTo && dialogDate > dateTo) return false;
-                if (quality !== 'all' && dialog.ai_analysis?.overall_quality !== quality) return false;
-                if (manager !== 'all' && dialog.ai_analysis?.manager_name !== manager) return false;
+                
+                const dialogQuality = getDialogQuality(dialog);
+                if (quality !== 'all' && dialogQuality !== quality) return false;
+                if (manager !== 'all' && dialog.manager_name !== manager) return false;
                 if (introduced !== 'all') {
-                    const isIntroduced = dialog.ai_analysis?.manager_introduced || false;
+                    const isIntroduced = dialog.introduced || false;
                     if (introduced === 'yes' && !isIntroduced) return false;
                     if (introduced === 'no' && isIntroduced) return false;
                 }
-                if (resolution !== 'all' && dialog.ai_analysis?.resolution_status !== resolution) return false;
-                if (risk !== 'all' && dialog.ai_analysis?.churn_risk_level !== risk) return false;
+                if (resolution !== 'all' && dialog.resolution_status !== resolution) return false;
+                if (risk !== 'all' && dialog.churn_risk_level !== risk) return false;
 
                 return true;
             });
 
             if (sort === 'newest') {
-                filteredDialogs.sort((a, b) => (b.last_message_timestamp || 0) - (a.last_message_timestamp || 0));
+                filteredDialogs.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
             } else if (sort === 'oldest') {
-                filteredDialogs.sort((a, b) => (a.last_message_timestamp || 0) - (b.last_message_timestamp || 0));
+                filteredDialogs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
             } else if (sort === 'best-quality') {
                 filteredDialogs.sort((a, b) => {
-                    const scoreA = a.ai_analysis?.client_satisfaction_estimate || 0;
-                    const scoreB = b.ai_analysis?.client_satisfaction_estimate || 0;
+                    const scoreA = a.professionalism_score || 0;
+                    const scoreB = b.professionalism_score || 0;
                     return scoreB - scoreA;
                 });
             } else if (sort === 'worst-quality') {
                 filteredDialogs.sort((a, b) => {
-                    const scoreA = a.ai_analysis?.client_satisfaction_estimate || 0;
-                    const scoreB = b.ai_analysis?.client_satisfaction_estimate || 0;
+                    const scoreA = a.professionalism_score || 0;
+                    const scoreB = b.professionalism_score || 0;
                     return scoreA - scoreB;
                 });
             } else if (sort === 'highest-risk') {
                 const riskOrder = { critical: 4, high: 3, medium: 2, low: 1 };
                 filteredDialogs.sort((a, b) => {
-                    const riskA = riskOrder[a.ai_analysis?.churn_risk_level] || 0;
-                    const riskB = riskOrder[b.ai_analysis?.churn_risk_level] || 0;
+                    const riskA = riskOrder[a.churn_risk_level] || 0;
+                    const riskB = riskOrder[b.churn_risk_level] || 0;
                     return riskB - riskA;
                 });
             }
@@ -813,8 +824,8 @@
         function populateManagerFilter() {
             const managers = new Set();
             allDialogs.forEach(d => {
-                if (d.ai_analysis?.manager_name) {
-                    managers.add(d.ai_analysis.manager_name);
+                if (d.manager_name) {
+                    managers.add(d.manager_name);
                 }
             });
 
@@ -840,21 +851,21 @@
         function renderStats() {
             const total = filteredDialogs.length;
             const avgSatisfaction = total > 0 
-                ? (filteredDialogs.reduce((sum, d) => sum + (d.ai_analysis?.client_satisfaction_estimate || 0), 0) / total).toFixed(1)
+                ? (filteredDialogs.reduce((sum, d) => sum + (d.professionalism_score || 0), 0) / total).toFixed(1)
                 : 0;
             
-            const introduced = filteredDialogs.filter(d => d.ai_analysis?.manager_introduced).length;
+            const introduced = filteredDialogs.filter(d => d.introduced).length;
             const introducedPercent = total > 0 ? ((introduced / total) * 100).toFixed(0) : 0;
 
             const avgResponseTime = total > 0
-                ? (filteredDialogs.reduce((sum, d) => sum + (d.response_time_minutes || 0), 0) / total).toFixed(0)
+                ? (filteredDialogs.reduce((sum, d) => sum + (d.response_delay_working_minutes || d.avg_response_time_minutes || 0), 0) / total).toFixed(0)
                 : 0;
 
             const highRisk = filteredDialogs.filter(d => 
-                d.ai_analysis?.churn_risk_level === 'high' || d.ai_analysis?.churn_risk_level === 'critical'
+                d.churn_risk_level === 'high' || d.churn_risk_level === 'critical'
             ).length;
 
-            const excellent = filteredDialogs.filter(d => d.ai_analysis?.overall_quality === 'excellent').length;
+            const excellent = filteredDialogs.filter(d => getDialogQuality(d) === 'excellent').length;
 
             const html = `
                 <div class="stat-card">
@@ -902,47 +913,47 @@
             }
 
             const html = filteredDialogs.map(dialog => {
-                const ai = dialog.ai_analysis || {};
-                const quality = ai.overall_quality || 'satisfactory';
+                const quality = getDialogQuality(dialog);
                 const qualityClass = `quality-${quality}`;
+                const sentiment = dialog.overall_sentiment || dialog.response_tone || 'нейтральное';
 
                 return `
                     <div class="dialog-card ${qualityClass}">
                         <div class="dialog-header">
-                            <div class="dialog-client">${dialog.client_name || 'Клиент'}</div>
-                            <div class="dialog-time">${dialog.first_message_time || ''}</div>
+                            <div class="dialog-client">${dialog.name || 'Клиент'}</div>
+                            <div class="dialog-time">${dialog.time || ''}</div>
                         </div>
                         
                         <div class="dialog-metrics">
                             <div class="metric-item">
                                 <span class="metric-label">Менеджер:</span>
-                                <span class="metric-value">${ai.manager_name || 'н/д'}</span>
+                                <span class="metric-value">${dialog.manager_name || 'н/д'}</span>
                             </div>
                             <div class="metric-item">
                                 <span class="metric-label">Оценка:</span>
-                                <span class="metric-value">${ai.client_satisfaction_estimate || 0}/10</span>
+                                <span class="metric-value">${dialog.professionalism_score || 0}/10</span>
                             </div>
                             <div class="metric-item">
                                 <span class="metric-label">Время ответа:</span>
-                                <span class="metric-value">${dialog.response_time_minutes || 0}м</span>
+                                <span class="metric-value">${dialog.response_delay_working_minutes || dialog.avg_response_time_minutes || 0}м</span>
                             </div>
                             <div class="metric-item">
                                 <span class="metric-label">Представился:</span>
-                                <span class="metric-value">${ai.manager_introduced ? '✅' : '❌'}</span>
+                                <span class="metric-value">${dialog.introduced ? '✅' : '❌'}</span>
                             </div>
                             <div class="metric-item">
                                 <span class="metric-label">Настроение:</span>
-                                <span class="metric-value">${ai.overall_sentiment || 'н/д'}</span>
+                                <span class="metric-value">${sentiment}</span>
                             </div>
                             <div class="metric-item">
                                 <span class="metric-label">Риск оттока:</span>
-                                <span class="metric-value">${ai.churn_risk_level || 'н/д'}</span>
+                                <span class="metric-value">${dialog.churn_risk_level || dialog.risk_level || 'н/д'}</span>
                             </div>
                         </div>
 
-                        ${ai.summary ? `
+                        ${dialog.summary || dialog.suggestions ? `
                             <div class="dialog-ai-summary">
-                                <strong>AI резюме:</strong> ${ai.summary}
+                                <strong>AI резюме:</strong> ${dialog.summary || (dialog.suggestions && dialog.suggestions[0]) || 'Анализ в процессе'}
                             </div>
                         ` : ''}
                     </div>
@@ -956,7 +967,7 @@
             const managerStats = {};
 
             filteredDialogs.forEach(dialog => {
-                const managerName = dialog.ai_analysis?.manager_name || 'Неизвестно';
+                const managerName = dialog.manager_name || 'Неизвестно';
                 if (!managerStats[managerName]) {
                     managerStats[managerName] = {
                         total: 0,
@@ -973,11 +984,11 @@
 
                 const stats = managerStats[managerName];
                 stats.total++;
-                stats.totalScore += dialog.ai_analysis?.client_satisfaction_estimate || 0;
-                stats.avgResponseTime += dialog.response_time_minutes || 0;
-                if (dialog.ai_analysis?.manager_introduced) stats.introduced++;
+                stats.totalScore += dialog.professionalism_score || 0;
+                stats.avgResponseTime += dialog.response_delay_working_minutes || dialog.avg_response_time_minutes || 0;
+                if (dialog.introduced) stats.introduced++;
 
-                const quality = dialog.ai_analysis?.overall_quality || 'satisfactory';
+                const quality = getDialogQuality(dialog);
                 stats[quality] = (stats[quality] || 0) + 1;
             });
 
@@ -1035,9 +1046,9 @@
             const hourCounts = new Array(24).fill(0);
             
             filteredDialogs.forEach(dialog => {
-                if (dialog.first_message_time) {
-                    const hour = parseInt(dialog.first_message_time.split(' ')[1]?.split(':')[0] || 0);
-                    hourCounts[hour]++;
+                if (dialog.time) {
+                    const hour = parseInt(dialog.time.split(' ')[1]?.split(':')[0] || dialog.time.split(':')[0] || 0);
+                    if (hour >= 0 && hour < 24) hourCounts[hour]++;
                 }
             });
 
@@ -1072,11 +1083,14 @@
             const hourData = {};
             
             filteredDialogs.forEach(dialog => {
-                if (dialog.first_message_time && dialog.response_time_minutes) {
-                    const hour = parseInt(dialog.first_message_time.split(' ')[1]?.split(':')[0] || 0);
-                    if (!hourData[hour]) hourData[hour] = { total: 0, count: 0 };
-                    hourData[hour].total += dialog.response_time_minutes;
-                    hourData[hour].count++;
+                const responseTime = dialog.response_delay_working_minutes || dialog.avg_response_time_minutes || 0;
+                if (dialog.time && responseTime) {
+                    const hour = parseInt(dialog.time.split(' ')[1]?.split(':')[0] || dialog.time.split(':')[0] || 0);
+                    if (hour >= 0 && hour < 24) {
+                        if (!hourData[hour]) hourData[hour] = { total: 0, count: 0 };
+                        hourData[hour].total += responseTime;
+                        hourData[hour].count++;
+                    }
                 }
             });
 
@@ -1118,11 +1132,27 @@
             const qualityByDay = Array(7).fill(0).map(() => ({ total: 0, score: 0 }));
 
             filteredDialogs.forEach(dialog => {
-                if (dialog.first_message_time && dialog.ai_analysis?.client_satisfaction_estimate) {
-                    const date = new Date(dialog.first_message_time.split(' ')[0]);
-                    const dayIndex = date.getDay();
-                    qualityByDay[dayIndex].total++;
-                    qualityByDay[dayIndex].score += dialog.ai_analysis.client_satisfaction_estimate;
+                const score = dialog.professionalism_score || 0;
+                if (dialog.time && score) {
+                    try {
+                        const dateStr = dialog.time.split(' ')[0] || dialog.date;
+                        if (dateStr) {
+                            const parts = dateStr.split(/[.\-\/]/);
+                            let date;
+                            if (parts.length === 3) {
+                                if (parts[0].length === 4) {
+                                    date = new Date(parts[0], parts[1] - 1, parts[2]);
+                                } else {
+                                    date = new Date(parts[2], parts[1] - 1, parts[0]);
+                                }
+                                const dayIndex = date.getDay();
+                                qualityByDay[dayIndex].total++;
+                                qualityByDay[dayIndex].score += score;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Date parsing error:', dialog.time);
+                    }
                 }
             });
 
@@ -1167,18 +1197,20 @@
             }
 
             const rows = filteredDialogs.map(dialog => {
-                const ai = dialog.ai_analysis || {};
-                const qualityBadge = ai.overall_quality ? `<span class="badge badge-${ai.overall_quality}">${ai.overall_quality}</span>` : 'н/д';
+                const quality = getDialogQuality(dialog);
+                const qualityBadge = `<span class="badge badge-${quality}">${quality}</span>`;
+                const sentiment = dialog.overall_sentiment || dialog.response_tone || 'нейтральное';
+                const suggestions = dialog.suggestions || [];
                 
                 return `
                     <tr>
-                        <td><strong>${dialog.client_name || 'Клиент'}</strong><br><small style="color: #657786;">${dialog.first_message_time || ''}</small></td>
-                        <td>${ai.manager_name || 'н/д'}</td>
+                        <td><strong>${dialog.name || 'Клиент'}</strong><br><small style="color: #657786;">${dialog.time || ''}</small></td>
+                        <td>${dialog.manager_name || 'н/д'}</td>
                         <td>${qualityBadge}</td>
-                        <td>${ai.overall_sentiment || 'н/д'}</td>
-                        <td>${ai.churn_risk_level || 'н/д'}</td>
-                        <td><small>${ai.main_topic || 'н/д'}</small></td>
-                        <td><small>${(ai.suggestions || []).slice(0, 2).join('; ')}</small></td>
+                        <td>${sentiment}</td>
+                        <td>${dialog.churn_risk_level || dialog.risk_level || 'н/д'}</td>
+                        <td><small>${dialog.main_topic || 'н/д'}</small></td>
+                        <td><small>${Array.isArray(suggestions) ? suggestions.slice(0, 2).join('; ') : suggestions}</small></td>
                     </tr>
                 `;
             }).join('');
@@ -1190,18 +1222,19 @@
             const csv = ['Клиент,Менеджер,Качество,Оценка,Время ответа,Представился,Настроение,Риск,Тема,Резюме'];
             
             filteredDialogs.forEach(dialog => {
-                const ai = dialog.ai_analysis || {};
+                const quality = getDialogQuality(dialog);
+                const sentiment = dialog.overall_sentiment || dialog.response_tone || '';
                 csv.push([
-                    dialog.client_name || '',
-                    ai.manager_name || '',
-                    ai.overall_quality || '',
-                    ai.client_satisfaction_estimate || 0,
-                    dialog.response_time_minutes || 0,
-                    ai.manager_introduced ? 'Да' : 'Нет',
-                    ai.overall_sentiment || '',
-                    ai.churn_risk_level || '',
-                    ai.main_topic || '',
-                    (ai.summary || '').replace(/,/g, ';')
+                    dialog.name || '',
+                    dialog.manager_name || '',
+                    quality,
+                    dialog.professionalism_score || 0,
+                    dialog.response_delay_working_minutes || dialog.avg_response_time_minutes || 0,
+                    dialog.introduced ? 'Да' : 'Нет',
+                    sentiment,
+                    dialog.churn_risk_level || dialog.risk_level || '',
+                    dialog.main_topic || '',
+                    (dialog.summary || '').replace(/,/g, ';')
                 ].join(','));
             });
 
