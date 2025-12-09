@@ -343,7 +343,7 @@ class DialogScanner:
             return []
 
     async def scan_all_dialogs_for_analytics(self):
-        """Получить прочитанные диалоги с 15:00 для аналитики"""
+        """Получить диалоги для аналитики: все где прошел >1 час с последнего сообщения"""
         try:
             me = await self.client.get_me()
             dialogs = await self.client.get_dialogs(limit=500)
@@ -351,9 +351,10 @@ class DialogScanner:
             all_dialogs = []
             
             now = datetime.now(LOCAL_TZ)
-            today_3pm = now.replace(hour=15, minute=0, second=0, microsecond=0)
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-            logger.info(f"📊 Сбор прочитанных диалогов с {today_3pm.strftime('%H:%M')}")
+            logger.info(f"📊 Сбор диалогов для аналитики (>1 час с последнего сообщения)")
+            logger.info(f"📊 Текущее время: {now.strftime('%H:%M')}, всего диалогов для проверки: {len(dialogs)}")
 
             for dialog in dialogs:
                 if is_excluded(dialog):
@@ -367,19 +368,29 @@ class DialogScanner:
                 if hasattr(entity, 'broadcast') or hasattr(entity, 'megagroup'):
                     continue
 
-                # ВСЕ диалоги (прочитанные и непрочитанные) для полной аналитики
-                # Удален фильтр по unread_count - показываем ВСЕ диалоги за день
-
                 name = dialog.name or getattr(entity, 'username', 'Без имени')
 
-                # Получаем сообщения с 15:00
+                # Получаем последнее сообщение
+                last_msg = dialog.message
+                if not last_msg:
+                    continue
+                
+                last_msg_time = last_msg.date.astimezone(LOCAL_TZ)
+                
+                # Проверяем: прошел ли час с последнего сообщения (от кого угодно)
+                hours_since_last = (now - last_msg_time).total_seconds() / 3600
+                
+                if hours_since_last < 1.0:
+                    continue  # Пропускаем если меньше часа
+                
+                # Получаем все сообщения за сегодня
                 all_messages_for_analysis = []
                 try:
                     async for msg in self.client.iter_messages(entity, limit=None):
                         msg_local_time = msg.date.astimezone(LOCAL_TZ)
                         
-                        # Фильтр: только сообщения с 15:00 сегодня
-                        if msg_local_time < today_3pm:
+                        # Фильтр: только сообщения за сегодня
+                        if msg_local_time < today_start:
                             break
                         
                         msg_sender = await msg.get_sender()
@@ -398,9 +409,11 @@ class DialogScanner:
                     logger.warning(f"Не удалось получить сообщения для {name}: {e}")
                     continue
 
-                # Пропускаем диалоги без сообщений за период
+                # Пропускаем диалоги без сообщений
                 if not all_messages_for_analysis:
                     continue
+                
+                logger.info(f"✅ Добавляем в аналитику: {name} (последнее сообщение {hours_since_last:.1f}ч назад, всего {len(all_messages_for_analysis)} сообщений)")
 
                 # Анализ времени ответа
                 response_analysis = detailed_analyzer.analyze_response_times(all_messages_for_analysis)
