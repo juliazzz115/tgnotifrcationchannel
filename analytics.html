@@ -494,6 +494,8 @@
             let html = '';
 
             dialogs.forEach(dialog => {
+                console.log('Отрисовка диалога:', dialog.name, 'response_quality:', dialog.response_quality);
+                
                 const cardClass = dialog.is_overtime ? 'overtime' : 
                                  (dialog.response_quality === 'отлично' || dialog.response_quality === 'хорошо') ? 'good' : '';
 
@@ -513,7 +515,7 @@
                     'долго': 'Долго',
                     'очень_долго': 'Очень долго',
                     'нет_ответа': 'Нет ответа'
-                }[dialog.response_quality] || dialog.response_quality;
+                }[dialog.response_quality] || dialog.response_quality || '-';
 
                 html += `
                     <div class="dialog-detail-card ${cardClass}">
