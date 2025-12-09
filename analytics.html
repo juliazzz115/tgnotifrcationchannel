@@ -364,7 +364,9 @@
         });
 
         socket.on('analytics_update', (data) => {
-            console.log('📊 Получена аналитика:', data);
+            console.log('📊 Получена аналитика через WebSocket!');
+            console.log('Диалогов:', data.dialogs.length);
+            console.log('Статистика:', data.daily_stats);
             renderAnalytics(data);
         });
 

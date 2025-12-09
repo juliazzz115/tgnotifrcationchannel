@@ -602,6 +602,13 @@ class DialogScanner:
                     logger.info("📊 Сбор диалогов для аналитики...")
                     all_dialogs = await self.scan_all_dialogs_for_analytics()
                     all_dialogs_for_analytics = all_dialogs
+                    
+                    # Отправляем обновление аналитики всем клиентам
+                    socketio.emit('analytics_update', {
+                        'dialogs': all_dialogs,
+                        'daily_stats': detailed_analyzer.calculate_daily_stats(all_dialogs)
+                    })
+                    logger.info(f"📤 Отправлено обновление аналитики: {len(all_dialogs)} диалогов")
 
                 # АРХИВАЦИЯ И ОЧИСТКА ДАННЫХ В 7:00 УТРА
                 now = datetime.now(LOCAL_TZ)
