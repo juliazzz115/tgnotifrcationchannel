@@ -174,16 +174,9 @@ class DialogScanner:
                     name = dialog.name or getattr(entity, 'username', 'Без имени')
                     local_time = last_msg.date.astimezone(LOCAL_TZ)
 
-                    # ФИЛЬТР ДЛЯ РЕЖИМА "АНАЛИТИКА": только с 08:00 до 16:00 сегодня
-                    if mode == 'analytics':
-                        today_8am = today_start.replace(hour=8, minute=0, second=0, microsecond=0)
-                        today_4pm = today_start.replace(hour=16, minute=0, second=0, microsecond=0)
-
-                        # Пропускаем если не в диапазоне 08:00-16:00 сегодня
-                        if local_time < today_8am or local_time >= today_4pm:
-                            continue
-                    else:  # mode == 'dialogs'
-                        # Для диалогов: только за сегодня (с 00:00)
+                    # Для диалогов: только за сегодня (с 00:00)
+                    # Для аналитики: показываем ВСЕ прочитанные (без временного ограничения)
+                    if mode == 'dialogs':
                         if local_time < today_start:
                             continue
 
