@@ -19,6 +19,8 @@ from telethon import TelegramClient
 from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError
 from sentiment_analyzer import analyzer as sentiment_analyzer
+from google_ai_analyzer import GoogleAIAnalyzer
+from detailed_analyzer import DetailedAnalyzer
 
 load_dotenv()
 
@@ -376,10 +378,10 @@ def dialogs_page():
 
 @app.route('/analytics')
 def analytics_page():
-    """Страница аналитики"""
+    """Страница аналитики с Google AI"""
     if not session_exists:
         return redirect('/setup')
-    return render_template('manager.html', managers=MANAGERS, mode='analytics')
+    return render_template('analytics.html')
 
 
 @app.route('/setup')

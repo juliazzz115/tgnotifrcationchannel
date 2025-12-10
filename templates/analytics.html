@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Аналитика диалогов</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .header {
+            background: white;
+            border-bottom: 1px solid #e1e8ed;
+            padding: 20px 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 600;
+            color: #0066cc;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .nav-tab {
+            padding: 10px 20px;
+            background: white;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #657786;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .nav-tab:hover {
+            border-color: #0066cc;
+            color: #0066cc;
+        }
+
+        .nav-tab.active {
+            background: #0066cc;
+            color: white;
+            border-color: #0066cc;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: #657786;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #17bf63;
+        }
+
+        .status-dot.offline {
+            background: #e0245e;
+        }
+
+        .main-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 24px 0;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            border-left: 4px solid #0066cc;
+        }
+
+        .stat-card.warning {
+            border-left-color: #ff9500;
+        }
+
+        .stat-card.danger {
+            border-left-color: #e0245e;
+        }
+
+        .stat-card.success {
+            border-left-color: #17bf63;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: #657786;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 36px;
+            font-weight: 700;
+            color: #14171a;
+            margin-bottom: 8px;
+        }
+
+        .stat-description {
+            font-size: 13px;
+            color: #657786;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            margin: 24px 0;
+        }
+
+        .chart-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        .chart-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #14171a;
+        }
+
+        .details-section {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 24px 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #14171a;
+            border-bottom: 2px solid #f5f7fa;
+            padding-bottom: 12px;
+        }
+
+        .dialog-detail-card {
+            background: #f5f7fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 16px;
+            border-left: 4px solid #e1e8ed;
+        }
+
+        .dialog-detail-card.overtime {
+            border-left-color: #e0245e;
+            background: #fff5f5;
+        }
+
+        .dialog-detail-card.good {
+            border-left-color: #17bf63;
+            background: #f0fff4;
+        }
+
+        .dialog-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .dialog-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #14171a;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .badge.excellent { background: #d1fae5; color: #065f46; }
+        .badge.good { background: #d1fae5; color: #047857; }
+        .badge.acceptable { background: #fef3c7; color: #92400e; }
+        .badge.slow { background: #fed7aa; color: #9a3412; }
+        .badge.very-slow { background: #fee2e2; color: #991b1b; }
+
+        .metric-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 12px;
+        }
+
+        .metric-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .metric-icon {
+            font-size: 18px;
+        }
+
+        .metric-label {
+            color: #657786;
+            font-weight: 500;
+        }
+
+        .metric-value {
+            color: #14171a;
+            font-weight: 600;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 60px 20px;
+            color: #657786;
+            font-size: 16px;
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .main-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-tabs {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">📊 Аналитика диалогов</div>
+                <div class="nav-tabs">
+                    <a href="/manager" class="nav-tab">Диалоги</a>
+                    <a href="/analytics" class="nav-tab active">Аналитика</a>
+                    <a href="/messages" class="nav-tab">Уведомления</a>
+                </div>
+                <div class="status">
+                    <span class="status-dot" id="status-dot"></span>
+                    <span id="connection-status">Подключение...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="main-stats">
+            <div class="stat-card">
+                <div class="stat-label">Всего диалогов за день</div>
+                <div class="stat-value" id="stat-total">0</div>
+                <div class="stat-description">Неотвеченных сообщений</div>
+            </div>
+
+            <div class="stat-card warning">
+                <div class="stat-label">Среднее время ответа</div>
+                <div class="stat-value" id="stat-avg-time">0ч</div>
+                <div class="stat-description" id="stat-avg-desc">На первое сообщение клиента</div>
+            </div>
+
+            <div class="stat-card danger">
+                <div class="stat-label">Превышение SLA (>1.5ч)</div>
+                <div class="stat-value" id="stat-overtime">0</div>
+                <div class="stat-description" id="stat-overtime-desc">0% от общего числа</div>
+            </div>
+
+            <div class="stat-card success">
+                <div class="stat-label">Менеджер представился</div>
+                <div class="stat-value" id="stat-introduced">0%</div>
+                <div class="stat-description">Процент диалогов с представлением</div>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-card">
+                <div class="chart-title">Распределение времени ответа</div>
+                <canvas id="responseTimeChart"></canvas>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-title">Качество обслуживания</div>
+                <canvas id="qualityChart"></canvas>
+            </div>
+        </div>
+
+        <div class="details-section">
+            <div class="section-title">Детальный анализ диалогов</div>
+            <div id="dialogDetails">
+                <div class="no-data">Загрузка данных...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io({
+            transports: ['websocket', 'polling'],
+            reconnection: true
+        });
+
+        let responseTimeChart = null;
+        let qualityChart = null;
+
+        socket.on('connect', () => {
+            console.log('✅ Подключено');
+            document.getElementById('connection-status').textContent = 'Онлайн';
+            document.getElementById('status-dot').classList.remove('offline');
+            loadAnalytics();
+        });
+
+        socket.on('disconnect', () => {
+            console.log('❌ Отключено');
+            document.getElementById('connection-status').textContent = 'Офлайн';
+            document.getElementById('status-dot').classList.add('offline');
+        });
+
+        socket.on('analytics_update', (data) => {
+            console.log('📊 Получена аналитика:', data);
+            renderAnalytics(data);
+        });
+
+        async function loadAnalytics() {
+            try {
+                const response = await fetch('/api/analytics');
+                const data = await response.json();
+                renderAnalytics(data);
+            } catch (e) {
+                console.error('Ошибка загрузки аналитики:', e);
+            }
+        }
+
+        function renderAnalytics(data) {
+            const stats = data.daily_stats;
+            const dialogs = data.dialogs;
+
+            document.getElementById('stat-total').textContent = stats.total_dialogs;
+            document.getElementById('stat-avg-time').textContent = stats.avg_response_time_hours ? `${stats.avg_response_time_hours}ч` : '-';
+            document.getElementById('stat-avg-desc').textContent = stats.avg_response_time_minutes ? `${stats.avg_response_time_minutes} минут` : 'Нет данных';
+            
+            document.getElementById('stat-overtime').textContent = stats.overtime_count;
+            document.getElementById('stat-overtime-desc').textContent = `${stats.overtime_percentage}% от общего числа`;
+
+            document.getElementById('stat-introduced').textContent = `${stats.introduced_percentage}%`;
+
+            renderCharts(stats);
+            renderDialogDetails(dialogs);
+        }
+
+        function renderCharts(stats) {
+            const qualityDist = stats.quality_distribution || {};
+
+            const qualityLabels = {
+                'отлично': 'Отлично (<15 мин)',
+                'хорошо': 'Хорошо (15-30 мин)',
+                'приемлемо': 'Приемлемо (30-60 мин)',
+                'долго': 'Долго (1-1.5ч)',
+                'очень_долго': 'Очень долго (>1.5ч)',
+                'нет_ответа': 'Нет ответа'
+            };
+
+            const qualityColors = {
+                'отлично': '#10b981',
+                'хорошо': '#34d399',
+                'приемлемо': '#fbbf24',
+                'долго': '#fb923c',
+                'очень_долго': '#ef4444',
+                'нет_ответа': '#6b7280'
+            };
+
+            const labels = Object.keys(qualityDist).map(k => qualityLabels[k] || k);
+            const values = Object.values(qualityDist);
+            const colors = Object.keys(qualityDist).map(k => qualityColors[k] || '#6b7280');
+
+            if (responseTimeChart) responseTimeChart.destroy();
+            if (qualityChart) qualityChart.destroy();
+
+            const ctx1 = document.getElementById('responseTimeChart').getContext('2d');
+            responseTimeChart = new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Количество диалогов',
+                        data: values,
+                        backgroundColor: colors,
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+
+            const ctx2 = document.getElementById('qualityChart').getContext('2d');
+            qualityChart = new Chart(ctx2, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderDialogDetails(dialogs) {
+            const container = document.getElementById('dialogDetails');
+
+            if (!dialogs || dialogs.length === 0) {
+                container.innerHTML = '<div class="no-data">Нет диалогов для анализа</div>';
+                return;
+            }
+
+            let html = '';
+
+            dialogs.forEach(dialog => {
+                const cardClass = dialog.is_overtime ? 'overtime' : 
+                                 (dialog.response_quality === 'отлично' || dialog.response_quality === 'хорошо') ? 'good' : '';
+
+                const qualityBadgeClass = {
+                    'отлично': 'excellent',
+                    'хорошо': 'good',
+                    'приемлемо': 'acceptable',
+                    'долго': 'slow',
+                    'очень_долго': 'very-slow'
+                }[dialog.response_quality] || 'acceptable';
+
+                const qualityText = {
+                    'отлично': 'Отлично',
+                    'хорошо': 'Хорошо',
+                    'приемлемо': 'Приемлемо',
+                    'долго': 'Долго',
+                    'очень_долго': 'Очень долго',
+                    'нет_ответа': 'Нет ответа'
+                }[dialog.response_quality] || dialog.response_quality;
+
+                html += `
+                    <div class="dialog-detail-card ${cardClass}">
+                        <div class="dialog-header-row">
+                            <div>
+                                <span class="dialog-name">${escapeHtml(dialog.name)}</span>
+                                <span class="badge ${qualityBadgeClass}">${qualityText}</span>
+                            </div>
+                            <div style="font-size: 14px; color: #657786;">
+                                ${dialog.time} | ${dialog.date}
+                            </div>
+                        </div>
+
+                        <div class="metric-row">
+                            <div class="metric-item">
+                                <span class="metric-icon">⏱️</span>
+                                <span class="metric-label">Время ответа:</span>
+                                <span class="metric-value">
+                                    ${dialog.response_delay_hours ? `${dialog.response_delay_hours}ч` : 
+                                      dialog.response_delay_minutes ? `${dialog.response_delay_minutes} мин` : '-'}
+                                </span>
+                            </div>
+
+                            <div class="metric-item">
+                                <span class="metric-icon">${dialog.introduced ? '✅' : '❌'}</span>
+                                <span class="metric-label">Представился:</span>
+                                <span class="metric-value">
+                                    ${dialog.introduced ? (dialog.manager_name || 'Да') : 'Нет'}
+                                </span>
+                            </div>
+
+                            <div class="metric-item">
+                                <span class="metric-icon">${dialog.greeting ? '👋' : '❌'}</span>
+                                <span class="metric-label">Приветствие:</span>
+                                <span class="metric-value">${dialog.greeting ? 'Да' : 'Нет'}</span>
+                            </div>
+
+                            <div class="metric-item">
+                                <span class="metric-icon">${dialog.client_emotion || '😐'}</span>
+                                <span class="metric-label">Настроение клиента</span>
+                            </div>
+                        </div>
+
+                        ${dialog.professionalism_score ? `
+                            <div style="margin-top: 12px; padding: 12px; background: white; border-radius: 6px;">
+                                <span style="font-size: 13px; color: #657786; font-weight: 600;">
+                                    Оценка профессионализма: 
+                                </span>
+                                <span style="font-size: 16px; font-weight: 700; color: ${dialog.professionalism_score >= 8 ? '#17bf63' : dialog.professionalism_score >= 6 ? '#fbbf24' : '#ef4444'}">
+                                    ${dialog.professionalism_score}/10
+                                </span>
+                            </div>
+                        ` : ''}
+
+                        ${dialog.ai_suggestions && dialog.ai_suggestions.length > 0 ? `
+                            <div style="margin-top: 12px; padding: 12px; background: #eff6ff; border-radius: 6px; border-left: 3px solid #0066cc;">
+                                <div style="font-size: 13px; color: #0066cc; font-weight: 600; margin-bottom: 8px;">
+                                    🤖 Рекомендации AI:
+                                </div>
+                                ${dialog.ai_suggestions.map(s => `<div style="font-size: 13px; color: #14171a; margin: 4px 0;">• ${s}</div>`).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        loadAnalytics();
+    </script>
+</body>
+</html>
