@@ -43,6 +43,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 # Глобальные переменные
 telegram_client = None
 unanswered_dialogs = []
+analytics_dialogs = []  # Кэш для аналитики
 
 # Файл для хранения статусов
 STATUS_FILE = 'dialog_statuses.json'
@@ -265,7 +266,7 @@ class DialogScanner:
 
     async def scan_forever(self):
         """Бесконечное сканирование"""
-        global telegram_client, unanswered_dialogs
+        global telegram_client, unanswered_dialogs, analytics_dialogs
 
         try:
             logger.info("=" * 80)
@@ -292,8 +293,29 @@ class DialogScanner:
                 # Получаем неотвеченные диалоги (только для раздела "Диалоги")
                 dialogs = await self.get_unanswered_dialogs(mode='dialogs')
 
+                # Получаем данные для аналитики (в том же loop!)
+                analytics = await self.get_unanswered_dialogs(mode='analytics')
+
                 # Загружаем статусы
                 statuses = load_statuses()
+
+                # Обогащаем аналитику статусами и сохраняем в кэш
+                if analytics:
+                    enriched_analytics = []
+                    for dialog in analytics:
+                        dialog_id = str(dialog['id'])
+                        if dialog_id in statuses:
+                            dialog['status'] = statuses[dialog_id].get('status', 'new')
+                            dialog['manager'] = statuses[dialog_id].get('manager', '')
+                            dialog['note'] = statuses[dialog_id].get('note', '')
+                        else:
+                            dialog['status'] = 'new'
+                            dialog['manager'] = ''
+                            dialog['note'] = ''
+                        enriched_analytics.append(dialog)
+                    analytics_dialogs = enriched_analytics
+                else:
+                    analytics_dialogs = []
 
                 if dialogs:
                     # Обогащаем данные статусами
@@ -428,39 +450,11 @@ def get_dialogs():
 
 @app.route('/api/analytics', methods=['GET'])
 def get_analytics():
-    """Получить аналитику диалогов (с 08:00 до 16:00 сегодня)"""
+    """Получить аналитику диалогов (закэшированные данные из фонового сканера)"""
     try:
-        # Создаем временный сканер для аналитики
-        if telegram_client:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-            async def fetch_analytics():
-                scanner = DialogScanner()
-                scanner.client = telegram_client
-                analytics_dialogs = await scanner.get_unanswered_dialogs(mode='analytics')
-                return analytics_dialogs
-
-            analytics_dialogs = loop.run_until_complete(fetch_analytics())
-            loop.close()
-
-            # Обогащаем статусами
-            statuses = load_statuses()
-            enriched = []
-            for dialog in analytics_dialogs:
-                dialog_id = str(dialog['id'])
-                enriched_dialog = dialog.copy()
-                if dialog_id in statuses:
-                    enriched_dialog.update(statuses[dialog_id])
-                else:
-                    enriched_dialog['status'] = 'new'
-                    enriched_dialog['manager'] = ''
-                    enriched_dialog['note'] = ''
-                enriched.append(enriched_dialog)
-
-            return jsonify({'dialogs': enriched})
-        else:
-            return jsonify({'dialogs': []})
+        # Возвращаем закэшированные данные, которые обновляются в фоновом сканере
+        # Это избегает проблем с asyncio event loop
+        return jsonify({'dialogs': analytics_dialogs})
     except Exception as e:
         logger.error(f"Ошибка получения аналитики: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
