@@ -39,12 +39,41 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 40px;
         }
 
         .logo {
             font-size: 24px;
             font-weight: 600;
             color: #0066cc;
+        }
+
+        /* Навигация */
+        .nav-tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .nav-tab {
+            padding: 10px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #657786;
+            font-weight: 600;
+            font-size: 15px;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .nav-tab:hover {
+            background: #f5f7fa;
+            color: #0066cc;
+        }
+
+        .nav-tab.active {
+            background: #0066cc;
+            color: white;
+            border-color: #0066cc;
         }
 
         .status {
@@ -338,6 +367,75 @@
             margin: 16px 0;
         }
 
+        /* Оценка качества */
+        .quality-score-block {
+            background: white;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+            border: 2px solid #e1e8ed;
+        }
+
+        .quality-score-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .quality-score-value {
+            font-size: 48px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .quality-score-value.excellent { color: #17bf63; }
+        .quality-score-value.good { color: #ffad1f; }
+        .quality-score-value.fair { color: #ff9500; }
+        .quality-score-value.critical { color: #e0245e; }
+
+        .quality-score-label {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .quality-deductions {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #e1e8ed;
+        }
+
+        .quality-deductions-title {
+            font-size: 13px;
+            color: #657786;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .deduction-item {
+            font-size: 13px;
+            color: #14171a;
+            padding: 4px 0;
+        }
+
+        /* Категории проблем */
+        .problem-categories {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 12px 0;
+        }
+
+        .problem-badge {
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 600;
+            background: #ffe5ec;
+            color: #e0245e;
+            border: 1px solid #ffcdd2;
+        }
+
         .analysis-header {
             display: flex;
             gap: 12px;
@@ -537,6 +635,17 @@
         <div class="container">
             <div class="header-content">
                 <div class="logo">📊 Менеджер Диалогов</div>
+
+                <!-- Навигация между разделами -->
+                <div class="nav-tabs">
+                    <a href="/dialogs" class="nav-tab {% if mode == 'dialogs' %}active{% endif %}">
+                        💬 Диалоги
+                    </a>
+                    <a href="/analytics" class="nav-tab {% if mode == 'analytics' %}active{% endif %}">
+                        📈 Аналитика (08:00-16:00)
+                    </a>
+                </div>
+
                 <div class="status">
                     <span class="status-dot" id="status-dot"></span>
                     <span id="connection-status">Подключение...</span>
@@ -589,6 +698,7 @@
         let allDialogs = [];
         let currentFilter = 'all';
         const managers = {{ managers|tojson }};
+        const currentMode = '{{ mode }}';  // 'dialogs' или 'analytics'
 
         // Подключение
         socket.on('connect', () => {
@@ -633,9 +743,11 @@
         // Загрузка диалогов
         async function loadDialogs() {
             try {
-                const response = await fetch('/api/dialogs');
+                // Выбираем API endpoint в зависимости от режима
+                const endpoint = currentMode === 'analytics' ? '/api/analytics' : '/api/dialogs';
+                const response = await fetch(endpoint);
                 const data = await response.json();
-                allDialogs = data.dialogs;
+                allDialogs = data.dialogs || [];
                 renderDialogs();
             } catch (e) {
                 console.error('Ошибка загрузки:', e);
@@ -690,7 +802,38 @@
                     messagesHtml += '</div>';
                 }
 
-                // 🤖 Блок AI анализа
+                // 🎯 Оценка качества (новое!)
+                let qualityHtml = '';
+                if (dialog.quality_score !== undefined) {
+                    qualityHtml = '<div class="quality-score-block">';
+                    qualityHtml += '<div class="quality-score-header">';
+                    qualityHtml += `<div class="quality-score-value ${dialog.quality_class}">${dialog.quality_score}/100</div>`;
+                    qualityHtml += `<div class="quality-score-label">${dialog.quality_level}</div>`;
+                    qualityHtml += '</div>';
+
+                    // Детали оценки
+                    if (dialog.quality_deductions && dialog.quality_deductions.length > 0) {
+                        qualityHtml += '<div class="quality-deductions">';
+                        qualityHtml += '<div class="quality-deductions-title">Детали оценки:</div>';
+                        dialog.quality_deductions.forEach(deduction => {
+                            qualityHtml += `<div class="deduction-item">• ${escapeHtml(deduction)}</div>`;
+                        });
+                        qualityHtml += '</div>';
+                    }
+                    qualityHtml += '</div>';
+                }
+
+                // 🔍 Категории проблем (новое!)
+                let problemCategoriesHtml = '';
+                if (dialog.problem_categories && dialog.problem_categories.length > 0) {
+                    problemCategoriesHtml = '<div class="problem-categories">';
+                    dialog.problem_categories.forEach(category => {
+                        problemCategoriesHtml += `<span class="problem-badge">${escapeHtml(category)}</span>`;
+                    });
+                    problemCategoriesHtml += '</div>';
+                }
+
+                // 🤖 Блок AI анализа (улучшенный)
                 let analysisHtml = '';
                 if (dialog.client_emotion || dialog.warnings || dialog.recommendations) {
                     analysisHtml = '<div class="analysis-block">';
@@ -751,6 +894,10 @@
                         </div>
 
                         ${messagesHtml}
+
+                        ${qualityHtml}
+
+                        ${problemCategoriesHtml}
 
                         ${analysisHtml}
 
@@ -859,6 +1006,14 @@
 
             beep(1200, 0.3, 0.5);
             setTimeout(() => beep(800, 0.3, 0.5), 300);
+        }
+
+        // Автоматическое обновление для аналитики (каждые 5 минут)
+        if (currentMode === 'analytics') {
+            setInterval(() => {
+                console.log('🔄 Автообновление аналитики...');
+                loadDialogs();
+            }, 5 * 60 * 1000);  // 5 минут
         }
 
         loadDialogs();

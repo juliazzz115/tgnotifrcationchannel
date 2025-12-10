@@ -9,7 +9,7 @@ import json
 import pytz
 from datetime import datetime, time, timezone
 from threading import Thread
-from flask import Flask, render_template, request, jsonify, Response
+from flask import Flask, render_template, request, jsonify, Response, redirect
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import csv
@@ -121,14 +121,22 @@ class DialogScanner:
 
         logger.info("✅ TelegramClient создан")
 
-    async def get_unanswered_dialogs(self):
-        """Получить список неотвеченных диалогов"""
+    async def get_unanswered_dialogs(self, mode='dialogs'):
+        """
+        Получить список неотвеченных диалогов
+
+        Args:
+            mode: 'dialogs' или 'analytics'
+                - dialogs: прочитано + последнее от клиента + нет ответа от НАС > 1ч
+                - analytics: прочитано + нет ответа от ЛЮБОЙ стороны > 1ч (с 08:00 до 16:00)
+        """
         try:
             me = await self.client.get_me()
             dialogs = await self.client.get_dialogs(limit=300)
 
-            # Убрали фильтр "только сегодня" - показываем историю
             unanswered = []
+            now = datetime.now(LOCAL_TZ)
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
             for dialog in dialogs:
                 # Пропускаем исключенные чаты
@@ -152,17 +160,32 @@ class DialogScanner:
                 await last_msg.get_sender()
                 sender = last_msg.sender
 
-                # КЛЮЧЕВАЯ ЛОГИКА: unread_count == 0 (прочитали) и последнее от клиента
-                if dialog.unread_count == 0 and sender and sender.id != me.id:
+                # РЕЖИМ "ДИАЛОГИ": unread_count == 0 (прочитали) и последнее от клиента
+                # РЕЖИМ "АНАЛИТИКА": unread_count == 0 (прочитали) независимо от отправителя
+
+                if mode == 'dialogs':
+                    # Диалоги: прочитано И последнее от клиента (нужен ответ от НАС)
+                    should_include = (dialog.unread_count == 0 and sender and sender.id != me.id)
+                else:  # analytics
+                    # Аналитика: прочитано (неважно от кого последнее)
+                    should_include = (dialog.unread_count == 0)
+
+                if should_include:
                     name = dialog.name or getattr(entity, 'username', 'Без имени')
                     local_time = last_msg.date.astimezone(LOCAL_TZ)
 
-                    # ФИЛЬТР: Только сегодняшние сообщения (с 00:00 до текущего момента)
-                    now = datetime.now(LOCAL_TZ)
-                    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                    # ФИЛЬТР ДЛЯ РЕЖИМА "АНАЛИТИКА": только с 08:00 до 16:00 сегодня
+                    if mode == 'analytics':
+                        today_8am = today_start.replace(hour=8, minute=0, second=0, microsecond=0)
+                        today_4pm = today_start.replace(hour=16, minute=0, second=0, microsecond=0)
 
-                    if local_time < today_start:
-                        continue  # Пропускаем старые диалоги (не за сегодня)
+                        # Пропускаем если не в диапазоне 08:00-16:00 сегодня
+                        if local_time < today_8am or local_time >= today_4pm:
+                            continue
+                    else:  # mode == 'dialogs'
+                        # Для диалогов: только за сегодня (с 00:00)
+                        if local_time < today_start:
+                            continue
 
                     # Время без ответа
                     time_ago = now - local_time
@@ -204,7 +227,7 @@ class DialogScanner:
                     else:
                         chat_link = f"tg://openmessage?user_id={entity.id}"
 
-                    # 🤖 AI АНАЛИЗ ДИАЛОГА
+                    # 🤖 AI АНАЛИЗ ДИАЛОГА (улучшенный)
                     analysis = sentiment_analyzer.analyze_dialog(recent_messages, hours_ago)
 
                     unanswered.append({
@@ -217,7 +240,8 @@ class DialogScanner:
                         'hours_ago': round(hours_ago, 1),
                         'chat_link': chat_link,
                         'timestamp': last_msg.date.timestamp(),
-                        # Данные анализа
+                        'mode': mode,  # Режим (dialogs/analytics)
+                        # Данные AI анализа
                         'sentiment': analysis['sentiment'],
                         'sentiment_score': analysis['sentiment_score'],
                         'client_emotion': analysis['client_emotion'],
@@ -228,7 +252,13 @@ class DialogScanner:
                         'greeting': analysis['greeting'],
                         'is_critical': analysis['is_critical'],
                         'warnings': analysis['warnings'],
-                        'recommendations': analysis['recommendations']
+                        'recommendations': analysis['recommendations'],
+                        # Новые данные из улучшенного анализатора
+                        'quality_score': analysis['score'],
+                        'quality_level': analysis['quality_level'],
+                        'quality_class': analysis['quality_class'],
+                        'quality_deductions': analysis['deductions'],
+                        'problem_categories': analysis['problem_categories']
                     })
 
             logger.info(f"📊 Найдено неотвеченных диалогов: {len(unanswered)}")
@@ -263,8 +293,8 @@ class DialogScanner:
                 scan_count += 1
                 logger.info(f"СКАНИРОВАНИЕ #{scan_count} - {datetime.now().strftime('%H:%M:%S')}")
 
-                # Получаем неотвеченные диалоги
-                dialogs = await self.get_unanswered_dialogs()
+                # Получаем неотвеченные диалоги (только для раздела "Диалоги")
+                dialogs = await self.get_unanswered_dialogs(mode='dialogs')
 
                 # Загружаем статусы
                 statuses = load_statuses()
@@ -337,10 +367,26 @@ def run_scanner():
 
 @app.route('/')
 def index():
-    """Главная страница - система для менеджеров"""
+    """Главная страница - перенаправление на диалоги"""
     if not session_exists:
         return redirect('/setup')
-    return render_template('manager.html', managers=MANAGERS)
+    return redirect('/dialogs')
+
+
+@app.route('/dialogs')
+def dialogs_page():
+    """Страница диалогов"""
+    if not session_exists:
+        return redirect('/setup')
+    return render_template('manager.html', managers=MANAGERS, mode='dialogs')
+
+
+@app.route('/analytics')
+def analytics_page():
+    """Страница аналитики"""
+    if not session_exists:
+        return redirect('/setup')
+    return render_template('manager.html', managers=MANAGERS, mode='analytics')
 
 
 @app.route('/setup')
@@ -355,7 +401,7 @@ def setup():
 
 @app.route('/api/dialogs', methods=['GET'])
 def get_dialogs():
-    """Получить список неотвеченных диалогов"""
+    """Получить список неотвеченных диалогов (для раздела Диалоги)"""
     statuses = load_statuses()
 
     # Обогащаем диалоги статусами
@@ -372,6 +418,46 @@ def get_dialogs():
         enriched_dialogs.append(enriched)
 
     return jsonify({'dialogs': enriched_dialogs})
+
+
+@app.route('/api/analytics', methods=['GET'])
+def get_analytics():
+    """Получить аналитику диалогов (с 08:00 до 16:00 сегодня)"""
+    try:
+        # Создаем временный сканер для аналитики
+        if telegram_client:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            async def fetch_analytics():
+                scanner = DialogScanner()
+                scanner.client = telegram_client
+                analytics_dialogs = await scanner.get_unanswered_dialogs(mode='analytics')
+                return analytics_dialogs
+
+            analytics_dialogs = loop.run_until_complete(fetch_analytics())
+            loop.close()
+
+            # Обогащаем статусами
+            statuses = load_statuses()
+            enriched = []
+            for dialog in analytics_dialogs:
+                dialog_id = str(dialog['id'])
+                enriched_dialog = dialog.copy()
+                if dialog_id in statuses:
+                    enriched_dialog.update(statuses[dialog_id])
+                else:
+                    enriched_dialog['status'] = 'new'
+                    enriched_dialog['manager'] = ''
+                    enriched_dialog['note'] = ''
+                enriched.append(enriched_dialog)
+
+            return jsonify({'dialogs': enriched})
+        else:
+            return jsonify({'dialogs': []})
+    except Exception as e:
+        logger.error(f"Ошибка получения аналитики: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/update_status', methods=['POST'])
