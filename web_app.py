@@ -283,6 +283,7 @@ class DialogScanner:
             logger.info("=" * 80)
 
             scan_count = 0
+            previous_dialog_ids = set()  # Отслеживаем ID диалогов из предыдущего сканирования
 
             while True:
                 scan_count += 1
@@ -296,8 +297,11 @@ class DialogScanner:
 
                 if dialogs:
                     # Обогащаем данные статусами
+                    current_dialog_ids = set()
                     for dialog in dialogs:
                         dialog_id = str(dialog['id'])
+                        current_dialog_ids.add(dialog_id)
+
                         if dialog_id in statuses:
                             dialog['status'] = statuses[dialog_id].get('status', 'new')
                             dialog['manager'] = statuses[dialog_id].get('manager', '')
@@ -312,15 +316,22 @@ class DialogScanner:
                     # Отправляем обновление всем клиентам
                     socketio.emit('dialogs_update', {'dialogs': dialogs})
 
-                    # Проверяем новые диалоги для alert
-                    for dialog in dialogs:
-                        if dialog['status'] == 'new':
-                            logger.info(f"🔔 НОВЫЙ НЕОТВЕЧЕННЫЙ: {dialog['name']}")
-                            socketio.emit('new_unanswered', {'dialog': dialog})
+                    # Проверяем ДЕЙСТВИТЕЛЬНО НОВЫЕ диалоги (которых не было в предыдущем сканировании)
+                    # Отправляем уведомление только для них, НЕ для всех со статусом 'new'
+                    new_dialog_ids = current_dialog_ids - previous_dialog_ids
+                    if new_dialog_ids and scan_count > 1:  # Не отправляем уведомления при первом сканировании
+                        for dialog in dialogs:
+                            if str(dialog['id']) in new_dialog_ids:
+                                logger.info(f"🔔 НОВЫЙ НЕОТВЕЧЕННЫЙ: {dialog['name']}")
+                                socketio.emit('new_unanswered', {'dialog': dialog})
+
+                    # Обновляем список предыдущих ID для следующего сканирования
+                    previous_dialog_ids = current_dialog_ids
                 else:
                     # Если нет неотвеченных, очищаем список
                     unanswered_dialogs = []
                     socketio.emit('dialogs_update', {'dialogs': []})
+                    previous_dialog_ids = set()
 
                 # АВТООЧИСТКА: Убираем из статусов диалоги которых больше нет в неотвеченных
                 # (значит мы ответили или клиент написал новое сообщение)
